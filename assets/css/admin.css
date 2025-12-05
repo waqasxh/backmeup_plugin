@@ -1,0 +1,189 @@
+.bmu-main-page,
+.bmu-settings-page,
+.bmu-logs-page {
+  max-width: 1200px;
+}
+
+.bmu-card {
+  background: #fff;
+  border: 1px solid #ccd0d4;
+  border-radius: 4px;
+  padding: 20px;
+  margin: 20px 0;
+  box-shadow: 0 1px 1px rgba(0, 0, 0, 0.04);
+}
+
+.bmu-card h2 {
+  margin-top: 0;
+  border-bottom: 1px solid #eee;
+  padding-bottom: 10px;
+}
+
+/* Sync Buttons */
+.bmu-sync-buttons {
+  display: flex;
+  gap: 15px;
+  margin: 20px 0;
+}
+
+.bmu-sync-buttons .button-large {
+  padding: 10px 30px;
+  height: auto;
+  font-size: 16px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.bmu-sync-buttons .dashicons {
+  font-size: 20px;
+  width: 20px;
+  height: 20px;
+}
+
+/* Progress Bar */
+.bmu-progress-bar {
+  width: 100%;
+  height: 30px;
+  background: #f0f0f0;
+  border-radius: 15px;
+  overflow: hidden;
+  margin: 15px 0;
+}
+
+.bmu-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #0073aa, #00a0d2);
+  width: 0;
+  transition: width 0.3s ease;
+  animation: progress-animation 2s infinite;
+}
+
+@keyframes progress-animation {
+  0% {
+    background-position: 0 0;
+  }
+  100% {
+    background-position: 50px 0;
+  }
+}
+
+#bmu-sync-progress {
+  margin: 20px 0;
+  padding: 20px;
+  background: #f9f9f9;
+  border-radius: 4px;
+}
+
+#bmu-sync-message {
+  text-align: center;
+  margin: 10px 0 0;
+  font-weight: 500;
+}
+
+/* Sync Result */
+#bmu-sync-result {
+  margin: 20px 0;
+  padding: 15px;
+  border-radius: 4px;
+}
+
+#bmu-sync-result.success {
+  background: #d7f0db;
+  border-left: 4px solid #46b450;
+}
+
+#bmu-sync-result.error {
+  background: #f9dddc;
+  border-left: 4px solid #dc3232;
+}
+
+/* Status Badges */
+.bmu-status {
+  padding: 4px 10px;
+  border-radius: 3px;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  display: inline-block;
+}
+
+.bmu-status-success {
+  background: #d7f0db;
+  color: #1e8c3a;
+}
+
+.bmu-status-error {
+  background: #f9dddc;
+  color: #b32d2e;
+}
+
+.bmu-status-partial {
+  background: #fff3cd;
+  color: #856404;
+}
+
+.bmu-status-pending {
+  background: #e5f5fa;
+  color: #00739c;
+}
+
+/* Settings Form */
+.exclude-path-row {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.exclude-path-row input {
+  flex: 1;
+}
+
+#add-exclude-path {
+  margin-top: 10px;
+}
+
+.bmu-sync-status {
+  background: #f0f6fc;
+  padding: 15px;
+  border-radius: 4px;
+  margin-bottom: 20px;
+}
+
+.bmu-sync-status p {
+  margin: 5px 0;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .bmu-sync-buttons {
+    flex-direction: column;
+  }
+
+  .bmu-sync-buttons .button-large {
+    width: 100%;
+    justify-content: center;
+  }
+}
+
+/* Loading State */
+.bmu-loading {
+  opacity: 0.6;
+  pointer-events: none;
+}
+
+.bmu-spinner {
+  display: inline-block;
+  width: 20px;
+  height: 20px;
+  border: 3px solid rgba(0, 0, 0, 0.1);
+  border-radius: 50%;
+  border-top-color: #0073aa;
+  animation: spin 1s ease-in-out infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
