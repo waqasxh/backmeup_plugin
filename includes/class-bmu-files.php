@@ -110,10 +110,13 @@ class BMU_Files
                 file_put_contents($tmp_pass_file, $ssh_password);
                 chmod($tmp_pass_file, 0600);
 
+                // Convert paths to forward slashes for Cygwin compatibility
+                $sshpass_path = str_replace('\\', '/', $sshpass_path);
+                $tmp_pass_file = str_replace('\\', '/', $tmp_pass_file);
+
                 // Use sshpass for password authentication with temp file
-                // Note: Build command without escapeshellarg on individual parts - will be quoted as whole for -e option
                 $ssh_cmd = sprintf(
-                    '"%s" -f "%s" ssh -p %s -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null',
+                    '%s -f %s ssh -p %s -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null',
                     $sshpass_path,
                     $tmp_pass_file,
                     $ssh_port
@@ -122,7 +125,8 @@ class BMU_Files
                 // Use key-based authentication
                 $ssh_cmd = sprintf('ssh -p %s -o StrictHostKeyChecking=no', $ssh_port);
                 if (!empty($settings['ssh_key_path'])) {
-                    $ssh_cmd .= ' -i "' . $settings['ssh_key_path'] . '"';
+                    $ssh_key_unix = str_replace('\\', '/', $settings['ssh_key_path']);
+                    $ssh_cmd .= ' -i ' . $ssh_key_unix;
                 }
             }
 
@@ -135,13 +139,16 @@ class BMU_Files
                 $local_path_for_rsync = '/cygdrive/' . $drive . '/' . $path;
             }
 
+            // Convert rsync path to forward slashes for Cygwin
+            $rsync_path_unix = str_replace('\\', '/', $rsync_path);
+
             // Build rsync command
             if ($direction === 'pull') {
                 // Pull from remote to local
                 $remote_spec = $ssh_user . '@' . $ssh_host . ':' . $remote_path . '/';
                 $command = sprintf(
-                    '"%s" -avz -e "%s" %s "%s" "%s"',
-                    $rsync_path,
+                    '%s -avz -e "%s" %s %s %s',
+                    $rsync_path_unix,
                     $ssh_cmd,
                     $excludes,
                     $remote_spec,
@@ -151,8 +158,8 @@ class BMU_Files
                 // Push from local to remote
                 $remote_spec = $ssh_user . '@' . $ssh_host . ':' . $remote_path . '/';
                 $command = sprintf(
-                    '"%s" -avz -e "%s" %s "%s" "%s"',
-                    $rsync_path,
+                    '%s -avz -e "%s" %s %s %s',
+                    $rsync_path_unix,
                     $ssh_cmd,
                     $excludes,
                     $local_path_for_rsync,
