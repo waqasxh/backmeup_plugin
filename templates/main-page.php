@@ -42,8 +42,14 @@ if (!defined('ABSPATH')) exit;
         <h2>Recent Backups</h2>
 
         <p class="description">
-            <strong>Backup Location:</strong> <?php echo esc_html(WP_CONTENT_DIR . '/backups'); ?>
+            <strong>Backup Location:</strong> <?php echo esc_html(str_replace('/', DIRECTORY_SEPARATOR, WP_CONTENT_DIR . '/backups')); ?>
         </p>
+
+        <div style="margin-bottom: 15px;">
+            <button id="bmu-create-backup" class="button button-secondary">
+                <span class="dashicons dashicons-database-export"></span> Create Backup Now
+            </button>
+        </div>
 
         <?php if (!empty($backups)) : ?>
             <div style="margin-bottom: 15px;">
@@ -68,6 +74,9 @@ if (!defined('ABSPATH')) exit;
                             <td><?php echo size_format($backup['size']); ?></td>
                             <td><?php echo date('Y-m-d H:i:s', $backup['date']); ?></td>
                             <td>
+                                <button class="button button-small button-primary bmu-restore-backup" data-file="<?php echo esc_attr($backup['name']); ?>">
+                                    <span class="dashicons dashicons-database-import"></span> Restore
+                                </button>
                                 <a href="<?php echo esc_url(content_url('backups/' . $backup['name'])); ?>" class="button button-small" download>Download</a>
                                 <button class="button button-small bmu-delete-backup" data-file="<?php echo esc_attr($backup['name']); ?>">Delete</button>
                             </td>

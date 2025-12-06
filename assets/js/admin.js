@@ -252,4 +252,67 @@ jQuery(document).ready(function ($) {
         });
     });
 
+    // Create backup button
+    $('#bmu-create-backup').on('click', function () {
+        var $btn = $(this);
+        $btn.prop('disabled', true).html('<span class="dashicons dashicons-update dashicons-spin"></span> Creating Backup...');
+
+        $.ajax({
+            url: bmuAjax.ajaxurl,
+            type: 'POST',
+            data: {
+                action: 'bmu_create_backup',
+                nonce: bmuAjax.nonce
+            },
+            success: function (response) {
+                if (response.success) {
+                    alert(response.data);
+                    location.reload();
+                } else {
+                    alert('Error: ' + response.data);
+                    $btn.prop('disabled', false).html('<span class="dashicons dashicons-database-export"></span> Create Backup Now');
+                }
+            },
+            error: function () {
+                alert('Failed to create backup. Please try again.');
+                $btn.prop('disabled', false).html('<span class="dashicons dashicons-database-export"></span> Create Backup Now');
+            }
+        });
+    });
+
+    // Restore backup button
+    $(document).on('click', '.bmu-restore-backup', function () {
+        if (!confirm('This will overwrite your current files and database with the backup. Are you sure?')) {
+            return;
+        }
+
+        var $btn = $(this);
+        var filename = $btn.data('file');
+        
+        $btn.prop('disabled', true).html('<span class="dashicons dashicons-update dashicons-spin"></span> Restoring...');
+
+        $.ajax({
+            url: bmuAjax.ajaxurl,
+            type: 'POST',
+            data: {
+                action: 'bmu_restore_backup',
+                filename: filename,
+                nonce: bmuAjax.nonce
+            },
+            success: function (response) {
+                if (response.success) {
+                    alert(response.data);
+                    location.reload();
+                } else {
+                    alert('Error: ' + response.data);
+                    $btn.prop('disabled', false).html('<span class="dashicons dashicons-database-import"></span> Restore');
+                }
+            },
+            error: function () {
+                alert('Failed to restore backup. Please try again.');
+                $btn.prop('disabled', false).html('<span class="dashicons dashicons-database-import"></span> Restore');
+            }
+        });
+    });
+
 });
