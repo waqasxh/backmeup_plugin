@@ -111,17 +111,18 @@ class BMU_Files
                 chmod($tmp_pass_file, 0600);
 
                 // Use sshpass for password authentication with temp file
+                // Note: Build command without escapeshellarg on individual parts - will be quoted as whole for -e option
                 $ssh_cmd = sprintf(
-                    '%s -f %s ssh -p %s -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null',
-                    escapeshellarg($sshpass_path),
-                    escapeshellarg($tmp_pass_file),
-                    escapeshellarg($ssh_port)
+                    '"%s" -f "%s" ssh -p %s -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null',
+                    $sshpass_path,
+                    $tmp_pass_file,
+                    $ssh_port
                 );
             } else {
                 // Use key-based authentication
-                $ssh_cmd = sprintf('ssh -p %s -o StrictHostKeyChecking=no', escapeshellarg($ssh_port));
+                $ssh_cmd = sprintf('ssh -p %s -o StrictHostKeyChecking=no', $ssh_port);
                 if (!empty($settings['ssh_key_path'])) {
-                    $ssh_cmd .= ' -i ' . escapeshellarg($settings['ssh_key_path']);
+                    $ssh_cmd .= ' -i "' . $settings['ssh_key_path'] . '"';
                 }
             }
 
@@ -139,23 +140,23 @@ class BMU_Files
                 // Pull from remote to local
                 $remote_spec = $ssh_user . '@' . $ssh_host . ':' . $remote_path . '/';
                 $command = sprintf(
-                    '%s -avz -e %s %s %s %s',
-                    escapeshellarg($rsync_path),
-                    escapeshellarg($ssh_cmd),
+                    '"%s" -avz -e "%s" %s "%s" "%s"',
+                    $rsync_path,
+                    $ssh_cmd,
                     $excludes,
-                    escapeshellarg($remote_spec),
-                    escapeshellarg($local_path_for_rsync)
+                    $remote_spec,
+                    $local_path_for_rsync
                 );
             } else {
                 // Push from local to remote
                 $remote_spec = $ssh_user . '@' . $ssh_host . ':' . $remote_path . '/';
                 $command = sprintf(
-                    '%s -avz -e %s %s %s %s',
-                    escapeshellarg($rsync_path),
-                    escapeshellarg($ssh_cmd),
+                    '"%s" -avz -e "%s" %s "%s" "%s"',
+                    $rsync_path,
+                    $ssh_cmd,
                     $excludes,
-                    escapeshellarg($local_path_for_rsync),
-                    escapeshellarg($remote_spec)
+                    $local_path_for_rsync,
+                    $remote_spec
                 );
             }
 
