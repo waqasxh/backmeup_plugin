@@ -147,7 +147,7 @@ class BMU_Files
                 // Pull from remote to local
                 $remote_spec = $ssh_user . '@' . $ssh_host . ':' . $remote_path . '/';
                 $command = sprintf(
-                    '%s -avz -e "%s" %s %s %s',
+                    '%s -avz -e "%s" %s "%s" "%s"',
                     $rsync_path_unix,
                     $ssh_cmd,
                     $excludes,
@@ -158,7 +158,7 @@ class BMU_Files
                 // Push from local to remote
                 $remote_spec = $ssh_user . '@' . $ssh_host . ':' . $remote_path . '/';
                 $command = sprintf(
-                    '%s -avz -e "%s" %s %s %s',
+                    '%s -avz -e "%s" %s "%s" "%s"',
                     $rsync_path_unix,
                     $ssh_cmd,
                     $excludes,
