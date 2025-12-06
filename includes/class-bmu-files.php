@@ -94,7 +94,7 @@ class BMU_Files
     }
 
     /**
-     * Create a backup of current files
+     * Create a backup of current files and database
      */
     public static function create_backup()
     {
@@ -105,7 +105,12 @@ class BMU_Files
                 wp_mkdir_p($backup_dir);
             }
 
-            $backup_file = $backup_dir . '/backup-' . date('Y-m-d-H-i-s') . '.zip';
+            $timestamp = date('Y-m-d-H-i-s');
+            $backup_file = $backup_dir . '/backup-' . $timestamp . '.zip';
+            $db_file = $backup_dir . '/database-' . $timestamp . '.sql';
+
+            // Export database first
+            $db_exported = BMU_Database::export_database($db_file);
 
             $zip = new ZipArchive();
             if ($zip->open($backup_file, ZipArchive::CREATE) !== TRUE) {
@@ -115,11 +120,28 @@ class BMU_Files
             $settings = BMU_Core::get_settings();
             $exclude_paths = !empty($settings['exclude_paths']) ? $settings['exclude_paths'] : array();
 
+            // Add files to zip
             self::add_directory_to_zip($zip, ABSPATH, ABSPATH, $exclude_paths);
+
+            // Add database export to zip if successful
+            if ($db_exported && file_exists($db_file)) {
+                $zip->addFile($db_file, 'database-backup.sql');
+            }
 
             $zip->close();
 
-            BMU_Core::log_sync('backup', 'local', 'success', 'Backup created: ' . basename($backup_file));
+            // Clean up temporary database file
+            if (file_exists($db_file)) {
+                @unlink($db_file);
+            }
+
+            $backup_size = filesize($backup_file);
+            $message = 'Backup created: ' . basename($backup_file) . ' (' . size_format($backup_size) . ')';
+            if ($db_exported) {
+                $message .= ' - includes database';
+            }
+
+            BMU_Core::log_sync('backup', 'local', 'success', $message);
             return $backup_file;
         } catch (Exception $e) {
             BMU_Core::log_sync('backup', 'local', 'error', $e->getMessage());

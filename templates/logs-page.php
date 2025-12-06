@@ -7,6 +7,12 @@ if (!defined('ABSPATH')) exit;
 
     <div class="bmu-card">
         <?php if (!empty($logs)) : ?>
+            <div style="margin-bottom: 15px;">
+                <button id="bmu-clear-logs" class="button button-link-delete" style="color: #b32d2e;">
+                    <span class="dashicons dashicons-trash"></span> Clear All Logs
+                </button>
+            </div>
+            
             <table class="wp-list-table widefat fixed striped">
                 <thead>
                     <tr>

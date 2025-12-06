@@ -1,4 +1,4 @@
-# Back Me Up - WordPress Sync Plugin
+# BackMeUp - WordPress Sync Plugin
 
 A one-click solution for syncing WordPress installations between local and live environments.
 
@@ -29,7 +29,7 @@ A one-click solution for syncing WordPress installations between local and live 
    New-Item -ItemType SymbolicLink -Path "C:\Users\WaqasHaneef\Local Sites\shique\app\public\wp-content\plugins\back-me-up" -Target "d:\P\A2ZSystems\Stylena\BackMeUpPlugin"
    ```
 3. Activate the plugin in WordPress admin
-4. Configure your settings under "Back Me Up" > "Settings"
+4. Configure your settings under "BackMeUp" > "Settings"
 
 ## Configuration
 
@@ -62,7 +62,7 @@ A one-click solution for syncing WordPress installations between local and live 
 
 ### Pull from Live (Live → Local)
 
-1. Go to "Back Me Up" in WordPress admin
+1. Go to "BackMeUp" in WordPress admin
 2. Click "Pull from Live"
 3. The plugin will:
    - Create a local backup
@@ -72,7 +72,7 @@ A one-click solution for syncing WordPress installations between local and live 
 
 ### Push to Live (Local → Live)
 
-1. Go to "Back Me Up" in WordPress admin
+1. Go to "BackMeUp" in WordPress admin
 2. Click "Push to Live"
 3. Confirm the action
 4. The plugin will:

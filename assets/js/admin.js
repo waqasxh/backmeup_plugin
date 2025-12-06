@@ -147,4 +147,109 @@ jQuery(document).ready(function ($) {
         $(this).closest('.exclude-path-row').remove();
     });
 
+    // Delete single backup
+    $(document).on('click', '.bmu-delete-backup', function () {
+        if (!confirm('Are you sure you want to delete this backup?')) {
+            return;
+        }
+
+        var $btn = $(this);
+        var file = $btn.data('file');
+        var $row = $btn.closest('tr');
+
+        $btn.prop('disabled', true).text('Deleting...');
+
+        $.ajax({
+            url: bmuAjax.ajaxurl,
+            type: 'POST',
+            data: {
+                action: 'bmu_delete_backup',
+                file: file,
+                nonce: bmuAjax.nonce
+            },
+            success: function (response) {
+                if (response.success) {
+                    $row.fadeOut(400, function () {
+                        $(this).remove();
+                        // Reload if no more backups
+                        if ($('.bmu-delete-backup').length === 0) {
+                            location.reload();
+                        }
+                    });
+                } else {
+                    alert('Error: ' + response.data);
+                    $btn.prop('disabled', false).text('Delete');
+                }
+            },
+            error: function () {
+                alert('Failed to delete backup. Please try again.');
+                $btn.prop('disabled', false).text('Delete');
+            }
+        });
+    });
+
+    // Delete all backups
+    $('#bmu-delete-all-backups').on('click', function () {
+        if (!confirm('Are you sure you want to delete ALL backups? This cannot be undone!')) {
+            return;
+        }
+
+        var $btn = $(this);
+        $btn.prop('disabled', true).text('Deleting...');
+
+        $.ajax({
+            url: bmuAjax.ajaxurl,
+            type: 'POST',
+            data: {
+                action: 'bmu_delete_all_backups',
+                nonce: bmuAjax.nonce
+            },
+            success: function (response) {
+                if (response.success) {
+                    alert(response.data);
+                    location.reload();
+                } else {
+                    alert('Error: ' + response.data);
+                    $btn.prop('disabled', false).text('Delete All Backups');
+                }
+            },
+            error: function () {
+                alert('Failed to delete backups. Please try again.');
+                $btn.prop('disabled', false).text('Delete All Backups');
+            }
+        });
+    });
+
+    // Clear all logs
+    $('#bmu-clear-logs').on('click', function () {
+        if (!confirm('Are you sure you want to clear all sync logs? This cannot be undone!')) {
+            return;
+        }
+
+        var $btn = $(this);
+        $btn.prop('disabled', true).text('Clearing...');
+
+        $.ajax({
+            url: bmuAjax.ajaxurl,
+            type: 'POST',
+            data: {
+                action: 'bmu_clear_logs',
+                nonce: bmuAjax.nonce
+            },
+            success: function (response) {
+                if (response.success) {
+                    alert(response.data);
+                    location.reload();
+                } else {
+                    alert('Error: ' + response.data);
+                    $btn.prop('disabled', false).text('Clear All Logs');
+                }
+            },
+            error: function () {
+                alert('Failed to clear logs. Please try again.');
+                $btn.prop('disabled', false).text('Clear All Logs');
+            }
+        });
+    });
+
 });

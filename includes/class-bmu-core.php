@@ -1,7 +1,7 @@
 <?php
 
 /**
- * Core functionality for Back Me Up plugin
+ * Core functionality for BackMeUp plugin
  */
 
 class BMU_Core

@@ -13,13 +13,16 @@ class BMU_Admin
         add_action('admin_enqueue_scripts', array(__CLASS__, 'enqueue_scripts'));
         add_action('wp_ajax_bmu_sync', array(__CLASS__, 'ajax_sync'));
         add_action('wp_ajax_bmu_save_settings', array(__CLASS__, 'ajax_save_settings'));
+        add_action('wp_ajax_bmu_delete_backup', array(__CLASS__, 'ajax_delete_backup'));
+        add_action('wp_ajax_bmu_delete_all_backups', array(__CLASS__, 'ajax_delete_all_backups'));
+        add_action('wp_ajax_bmu_clear_logs', array(__CLASS__, 'ajax_clear_logs'));
     }
 
     public static function add_admin_menu()
     {
         add_menu_page(
-            'Back Me Up',
-            'Back Me Up',
+            'BackMeUp',
+            'BackMeUp',
             'manage_options',
             'back-me-up',
             array(__CLASS__, 'render_main_page'),
@@ -142,5 +145,86 @@ class BMU_Admin
         BMU_Core::update_settings($settings);
 
         wp_send_json_success('Settings saved successfully');
+    }
+
+    public static function ajax_delete_backup()
+    {
+        check_ajax_referer('bmu_ajax_nonce', 'nonce');
+
+        if (!current_user_can('manage_options')) {
+            wp_send_json_error('Unauthorized');
+            return;
+        }
+
+        $file = isset($_POST['file']) ? sanitize_file_name($_POST['file']) : '';
+
+        if (empty($file)) {
+            wp_send_json_error('No file specified');
+            return;
+        }
+
+        $backup_dir = WP_CONTENT_DIR . '/backups';
+        $file_path = $backup_dir . '/' . $file;
+
+        // Security check - ensure file is in backup directory
+        if (realpath($file_path) === false || strpos(realpath($file_path), realpath($backup_dir)) !== 0) {
+            wp_send_json_error('Invalid file path');
+            return;
+        }
+
+        if (file_exists($file_path) && unlink($file_path)) {
+            wp_send_json_success('Backup deleted successfully');
+        } else {
+            wp_send_json_error('Failed to delete backup');
+        }
+    }
+
+    public static function ajax_delete_all_backups()
+    {
+        check_ajax_referer('bmu_ajax_nonce', 'nonce');
+
+        if (!current_user_can('manage_options')) {
+            wp_send_json_error('Unauthorized');
+            return;
+        }
+
+        $backup_dir = WP_CONTENT_DIR . '/backups';
+
+        if (!file_exists($backup_dir)) {
+            wp_send_json_success('No backups to delete');
+            return;
+        }
+
+        $files = glob($backup_dir . '/*.zip');
+        $deleted = 0;
+
+        foreach ($files as $file) {
+            if (is_file($file) && unlink($file)) {
+                $deleted++;
+            }
+        }
+
+        wp_send_json_success("Deleted $deleted backup file(s)");
+    }
+
+    public static function ajax_clear_logs()
+    {
+        check_ajax_referer('bmu_ajax_nonce', 'nonce');
+
+        if (!current_user_can('manage_options')) {
+            wp_send_json_error('Unauthorized');
+            return;
+        }
+
+        global $wpdb;
+        $table_name = $wpdb->prefix . 'bmu_sync_log';
+
+        $deleted = $wpdb->query("DELETE FROM $table_name");
+
+        if ($deleted !== false) {
+            wp_send_json_success("Cleared $deleted log entries");
+        } else {
+            wp_send_json_error('Failed to clear logs');
+        }
     }
 }

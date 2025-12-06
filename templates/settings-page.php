@@ -3,7 +3,7 @@ if (!defined('ABSPATH')) exit;
 ?>
 
 <div class="wrap bmu-settings-page">
-    <h1>Back Me Up - Settings</h1>
+    <h1>BackMeUp - Settings</h1>
 
     <form id="bmu-settings-form">
         <?php wp_nonce_field('bmu_ajax_nonce', 'bmu_nonce'); ?>

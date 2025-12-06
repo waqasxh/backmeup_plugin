@@ -1,7 +1,7 @@
 <?php
 
 /**
- * Plugin Name: Back Me Up - WP Sync
+ * Plugin Name: BackMeUp - WP Sync
  * Plugin URI: https://a2zsystems.com
  * Description: One-click solution to sync WordPress installation between local and live environments
  * Version: 1.0.0
