@@ -112,6 +112,75 @@ For password-less authentication (recommended):
 
 ## Troubleshooting
 
+### Error: "sshpass: Failed to run command: No such file or directory"
+
+This error occurs when using password authentication without `sshpass` installed. **Recommended solution: Use SSH key authentication instead!**
+
+#### Solution 1: Use SSH Key Authentication (RECOMMENDED)
+
+This is the easiest and most secure solution - no `sshpass` required!
+
+1. **Generate an SSH key pair** (skip if you already have one):
+
+   ```powershell
+   # On Windows PowerShell
+   ssh-keygen -t rsa -b 4096
+   # Press Enter to accept default location (~/.ssh/id_rsa)
+   # Press Enter twice to skip passphrase
+   ```
+
+2. **Copy your public key to the remote server**:
+
+   ```powershell
+   # Method 1: Using ssh-copy-id (if available)
+   ssh-copy-id -p 22 username@remote-host
+
+   # Method 2: Manual copy
+   # Get your public key
+   Get-Content ~/.ssh/id_rsa.pub
+   # Then add it to remote server's ~/.ssh/authorized_keys file
+   ```
+
+3. **Test the connection**:
+
+   ```powershell
+   ssh -p 22 username@remote-host
+   # You should connect without a password prompt
+   ```
+
+4. **Update BackMeUp settings**:
+   - SSH Key Path: Enter path to your private key (e.g., `C:\Users\YourName\.ssh\id_rsa`)
+   - SSH Password: **Leave empty**
+   - Click "Test SSH Configuration" to verify
+   - Save settings
+
+#### Solution 2: Install sshpass (if you must use passwords)
+
+**Windows:**
+
+- Install Cygwin from https://cygwin.com
+- During installation, select these packages:
+  - `rsync`
+  - `sshpass`
+  - `openssh`
+- Add Cygwin's bin directory to your system PATH
+
+**macOS:**
+
+```bash
+brew install hudochenkov/sshpass/sshpass
+```
+
+**Linux:**
+
+```bash
+# Ubuntu/Debian
+sudo apt-get install sshpass
+
+# CentOS/RHEL
+sudo yum install sshpass
+```
+
 ### sshpass not found (Password authentication)
 
 Install sshpass on your system:

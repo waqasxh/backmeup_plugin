@@ -12,13 +12,21 @@ class BMU_Files
      */
     private static function find_rsync()
     {
-        $possible_paths = array(
-            'C:\\cygwin64\\bin\\rsync.exe',
-            'C:\\cygwin\\bin\\rsync.exe',
-            'rsync', // For systems where it's in PATH
-            '/usr/bin/rsync',
-            '/usr/local/bin/rsync'
-        );
+        $is_windows = strtoupper(substr(PHP_OS, 0, 3)) === 'WIN';
+
+        $possible_paths = array();
+
+        if ($is_windows) {
+            // Windows-specific paths (Cygwin)
+            $possible_paths[] = 'C:\\cygwin64\\bin\\rsync.exe';
+            $possible_paths[] = 'C:\\cygwin\\bin\\rsync.exe';
+        }
+
+        // Unix/Linux/macOS/WSL paths
+        $possible_paths[] = '/usr/bin/rsync';
+        $possible_paths[] = '/usr/local/bin/rsync';
+        $possible_paths[] = '/opt/homebrew/bin/rsync'; // macOS ARM (M1/M2)
+        $possible_paths[] = 'rsync'; // Fallback to PATH
 
         foreach ($possible_paths as $path) {
             if (file_exists($path) || self::command_exists($path)) {
@@ -34,13 +42,21 @@ class BMU_Files
      */
     private static function find_sshpass()
     {
-        $possible_paths = array(
-            'C:\\cygwin64\\bin\\sshpass.exe',
-            'C:\\cygwin\\bin\\sshpass.exe',
-            'sshpass',
-            '/usr/bin/sshpass',
-            '/usr/local/bin/sshpass'
-        );
+        $is_windows = strtoupper(substr(PHP_OS, 0, 3)) === 'WIN';
+
+        $possible_paths = array();
+
+        if ($is_windows) {
+            // Windows-specific paths (Cygwin)
+            $possible_paths[] = 'C:\\cygwin64\\bin\\sshpass.exe';
+            $possible_paths[] = 'C:\\cygwin\\bin\\sshpass.exe';
+        }
+
+        // Unix/Linux/macOS/WSL paths
+        $possible_paths[] = '/usr/bin/sshpass';
+        $possible_paths[] = '/usr/local/bin/sshpass';
+        $possible_paths[] = '/opt/homebrew/bin/sshpass'; // macOS ARM (M1/M2)
+        $possible_paths[] = 'sshpass'; // Fallback to PATH
 
         foreach ($possible_paths as $path) {
             if (file_exists($path) || self::command_exists($path)) {
@@ -52,11 +68,18 @@ class BMU_Files
     }
 
     /**
-     * Check if command exists
+     * Check if command exists (cross-platform)
      */
     private static function command_exists($command)
     {
-        $test = shell_exec(sprintf("which %s 2>/dev/null", escapeshellarg($command)));
+        $is_windows = strtoupper(substr(PHP_OS, 0, 3)) === 'WIN';
+
+        if ($is_windows) {
+            $test = shell_exec(sprintf("where %s 2>nul", escapeshellarg($command)));
+        } else {
+            $test = shell_exec(sprintf("which %s 2>/dev/null", escapeshellarg($command)));
+        }
+
         return !empty($test);
     }
 
@@ -80,7 +103,7 @@ class BMU_Files
             }
 
             $local_path = ABSPATH;
-            $remote_path = $settings['remote_path'];
+            $remote_path = rtrim($settings['remote_path'], '/'); // Remove trailing slash
             $ssh_user = $settings['ssh_user'];
             $ssh_host = $settings['ssh_host'];
             $ssh_port = !empty($settings['ssh_port']) ? $settings['ssh_port'] : '22';
@@ -94,10 +117,26 @@ class BMU_Files
                 }
             }
 
-            // Build SSH command with password support using sshpass if password is provided
-            $ssh_cmd = '';
-            $tmp_pass_file = null;
+            // Build rsync command with proper SSH options
+            // Add trailing slash to ensure we sync directory contents, not the directory itself
+            $remote_spec = $ssh_user . '@' . $ssh_host . ':' . $remote_path . '/';
 
+            // Convert Windows path to Cygwin format if using Cygwin rsync on Windows
+            $is_windows = strtoupper(substr(PHP_OS, 0, 3)) === 'WIN';
+            $local_path_for_rsync = $local_path;
+
+            if ($is_windows && strpos($rsync_path, 'cygwin') !== false) {
+                // Using Cygwin rsync on Windows - convert to Cygwin path format
+                $local_path_for_rsync = str_replace('\\', '/', $local_path);
+                if (preg_match('/^([A-Z]):(.*)$/i', $local_path_for_rsync, $matches)) {
+                    $local_path_for_rsync = '/cygdrive/' . strtolower($matches[1]) . $matches[2];
+                }
+            }
+
+            // Find ssh executable
+            $ssh_path = self::find_ssh();
+
+            // Build base rsync command with SSH options
             if (!empty($ssh_password) && empty($settings['ssh_key_path'])) {
                 // Find sshpass
                 $sshpass_path = self::find_sshpass();
@@ -105,87 +144,102 @@ class BMU_Files
                     throw new Exception('sshpass not found. Please install sshpass or use SSH key authentication');
                 }
 
-                // Create temporary password file for sshpass
-                $tmp_pass_file = tempnam(sys_get_temp_dir(), 'bmu_ssh_');
+                // Build SSH command with all options
+                $ssh_opts = sprintf(
+                    '-p %s -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null',
+                    $ssh_port
+                );
+
+                // Create a temporary password file for sshpass
+                $tmp_pass_file = tempnam(sys_get_temp_dir(), 'bmu_pass_');
                 file_put_contents($tmp_pass_file, $ssh_password);
                 chmod($tmp_pass_file, 0600);
 
-                // Convert paths to forward slashes for Cygwin compatibility
-                $sshpass_path = str_replace('\\', '/', $sshpass_path);
-                $tmp_pass_file = str_replace('\\', '/', $tmp_pass_file);
-
-                // Use sshpass for password authentication with temp file
-                // Use single quotes within the command to avoid issues with spaces
-                $ssh_cmd = sprintf(
-                    "'%s' -f '%s' ssh -p %s -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null",
-                    $sshpass_path,
-                    $tmp_pass_file,
-                    $ssh_port
-                );
+                // Use sshpass for password authentication with -f (file) option
+                if ($direction === 'pull') {
+                    // Pull from remote to local
+                    $command = sprintf(
+                        '"%s" -f %s "%s" -avz -e "%s %s" %s %s %s',
+                        $sshpass_path,
+                        escapeshellarg($tmp_pass_file),
+                        $rsync_path,
+                        $ssh_path,
+                        $ssh_opts,
+                        $excludes,
+                        $remote_spec,
+                        escapeshellarg($local_path_for_rsync)
+                    );
+                } else {
+                    // Push from local to remote
+                    $command = sprintf(
+                        '"%s" -f %s "%s" -avz -e "%s %s" %s %s %s',
+                        $sshpass_path,
+                        escapeshellarg($tmp_pass_file),
+                        $rsync_path,
+                        $ssh_path,
+                        $ssh_opts,
+                        $excludes,
+                        escapeshellarg($local_path_for_rsync),
+                        $remote_spec
+                    );
+                }
             } else {
                 // Use key-based authentication
-                $ssh_cmd = sprintf('ssh -p %s -o StrictHostKeyChecking=no', $ssh_port);
+                $ssh_opts = sprintf('-p %s -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null', $ssh_port);
                 if (!empty($settings['ssh_key_path'])) {
-                    $ssh_key_unix = str_replace('\\', '/', $settings['ssh_key_path']);
-                    $ssh_cmd .= ' -i ' . $ssh_key_unix;
+                    $ssh_opts .= ' -i ' . escapeshellarg($settings['ssh_key_path']);
                 }
-            }
 
-            // Convert local path for Cygwin if on Windows
-            $local_path_for_rsync = $local_path;
-            if (DIRECTORY_SEPARATOR === '\\' && preg_match('/^[A-Z]:\\\\/i', $local_path)) {
-                // Convert Windows path to Cygwin format: C:\path\to -> /cygdrive/c/path/to
-                $drive = strtolower(substr($local_path, 0, 1));
-                $path = str_replace('\\', '/', substr($local_path, 3));
-                $local_path_for_rsync = '/cygdrive/' . $drive . '/' . $path;
-            }
-
-            // Convert rsync path to forward slashes for Cygwin
-            $rsync_path_unix = str_replace('\\', '/', $rsync_path);
-
-            // Build rsync command
-            if ($direction === 'pull') {
-                // Pull from remote to local
-                $remote_spec = $ssh_user . '@' . $ssh_host . ':' . $remote_path . '/';
-                $command = sprintf(
-                    '%s -avz -e "%s" %s "%s" "%s"',
-                    $rsync_path_unix,
-                    $ssh_cmd,
-                    $excludes,
-                    $remote_spec,
-                    $local_path_for_rsync
-                );
-            } else {
-                // Push from local to remote
-                $remote_spec = $ssh_user . '@' . $ssh_host . ':' . $remote_path . '/';
-                $command = sprintf(
-                    '%s -avz -e "%s" %s "%s" "%s"',
-                    $rsync_path_unix,
-                    $ssh_cmd,
-                    $excludes,
-                    $local_path_for_rsync,
-                    $remote_spec
-                );
+                if ($direction === 'pull') {
+                    // Pull from remote to local
+                    $command = sprintf(
+                        '"%s" -avz -e "%s %s" %s %s %s',
+                        $rsync_path,
+                        $ssh_path,
+                        $ssh_opts,
+                        $excludes,
+                        $remote_spec,
+                        escapeshellarg($local_path_for_rsync)
+                    );
+                } else {
+                    // Push from local to remote
+                    $command = sprintf(
+                        '"%s" -avz -e "%s %s" %s %s %s',
+                        $rsync_path,
+                        $ssh_path,
+                        $ssh_opts,
+                        $excludes,
+                        escapeshellarg($local_path_for_rsync),
+                        $remote_spec
+                    );
+                }
             }
 
             $output = array();
             $return_var = 0;
             exec($command . ' 2>&1', $output, $return_var);
 
-            // Clean up temporary password file
-            if ($tmp_pass_file && file_exists($tmp_pass_file)) {
+            // Clean up temporary password file if it was created
+            if (isset($tmp_pass_file) && file_exists($tmp_pass_file)) {
                 unlink($tmp_pass_file);
             }
 
             if ($return_var !== 0) {
-                throw new Exception('File sync failed: ' . implode("\n", $output));
+                $error_output = implode("\n", $output);
+
+                // Check for common errors and provide helpful messages
+                if (strpos($error_output, 'No such file or directory') !== false && strpos($error_output, 'change_dir') !== false) {
+                    throw new Exception('Remote directory not found. Please verify the "Remote WordPress Path" in settings. Current path: ' . $remote_path . "\n\nFull error: " . $error_output);
+                }
+
+                throw new Exception('File sync failed: ' . $error_output);
             }
 
             BMU_Core::log_sync('files', $direction, 'success', 'Files synced successfully');
             return true;
         } catch (Exception $e) {
             // Clean up temporary password file on error
-            if (isset($tmp_pass_file) && $tmp_pass_file && file_exists($tmp_pass_file)) {
+            if (isset($tmp_pass_file) && file_exists($tmp_pass_file)) {
                 unlink($tmp_pass_file);
             }
             BMU_Core::log_sync('files', $direction, 'error', $e->getMessage());
@@ -224,8 +278,10 @@ class BMU_Files
             $settings = BMU_Core::get_settings();
             $exclude_paths = !empty($settings['exclude_paths']) ? $settings['exclude_paths'] : array();
 
-            // Add files to zip (skip wp-content/backups to avoid recursive backup)
-            $exclude_paths[] = 'wp-content/backups';
+            // Ensure wp-content/backups is excluded to avoid recursive backup
+            if (!in_array('wp-content/backups', $exclude_paths)) {
+                $exclude_paths[] = 'wp-content/backups';
+            }
             self::add_directory_to_zip($zip, ABSPATH, ABSPATH, $exclude_paths);
 
             // Add database export to zip if successful
@@ -319,5 +375,32 @@ class BMU_Files
         });
 
         return $backups;
+    }
+
+    private static function find_ssh()
+    {
+        $is_windows = strtoupper(substr(PHP_OS, 0, 3)) === 'WIN';
+
+        $possible_paths = array();
+
+        if ($is_windows) {
+            // Windows paths (Cygwin)
+            $possible_paths[] = 'C:\\cygwin64\\bin\\ssh.exe';
+            $possible_paths[] = 'C:\\cygwin\\bin\\ssh.exe';
+        }
+
+        // Unix/Linux/macOS/WSL paths
+        $possible_paths[] = '/usr/bin/ssh';
+        $possible_paths[] = '/usr/local/bin/ssh';
+        $possible_paths[] = '/opt/homebrew/bin/ssh'; // macOS ARM
+        $possible_paths[] = 'ssh'; // fallback to PATH
+
+        foreach ($possible_paths as $path) {
+            if (file_exists($path) || $path === 'ssh') {
+                return $path;
+            }
+        }
+
+        return 'ssh'; // fallback
     }
 }

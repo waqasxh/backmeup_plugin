@@ -12,16 +12,24 @@ class BMU_Sync
      */
     private static function find_ssh()
     {
-        $possible_paths = array(
-            'C:\\cygwin64\\bin\\ssh.exe',
-            'C:\\cygwin\\bin\\ssh.exe',
-            'ssh',
-            '/usr/bin/ssh',
-            '/usr/local/bin/ssh'
-        );
+        $is_windows = strtoupper(substr(PHP_OS, 0, 3)) === 'WIN';
+
+        $possible_paths = array();
+
+        if ($is_windows) {
+            // Windows-specific paths (Cygwin)
+            $possible_paths[] = 'C:\\cygwin64\\bin\\ssh.exe';
+            $possible_paths[] = 'C:\\cygwin\\bin\\ssh.exe';
+        }
+
+        // Unix/Linux/macOS/WSL paths
+        $possible_paths[] = '/usr/bin/ssh';
+        $possible_paths[] = '/usr/local/bin/ssh';
+        $possible_paths[] = '/opt/homebrew/bin/ssh'; // macOS ARM (M1/M2)
+        $possible_paths[] = 'ssh'; // Fallback to PATH
 
         foreach ($possible_paths as $path) {
-            if (file_exists($path)) {
+            if (file_exists($path) || $path === 'ssh') {
                 return $path;
             }
         }
@@ -34,16 +42,24 @@ class BMU_Sync
      */
     private static function find_scp()
     {
-        $possible_paths = array(
-            'C:\\cygwin64\\bin\\scp.exe',
-            'C:\\cygwin\\bin\\scp.exe',
-            'scp',
-            '/usr/bin/scp',
-            '/usr/local/bin/scp'
-        );
+        $is_windows = strtoupper(substr(PHP_OS, 0, 3)) === 'WIN';
+
+        $possible_paths = array();
+
+        if ($is_windows) {
+            // Windows-specific paths (Cygwin)
+            $possible_paths[] = 'C:\\cygwin64\\bin\\scp.exe';
+            $possible_paths[] = 'C:\\cygwin\\bin\\scp.exe';
+        }
+
+        // Unix/Linux/macOS/WSL paths
+        $possible_paths[] = '/usr/bin/scp';
+        $possible_paths[] = '/usr/local/bin/scp';
+        $possible_paths[] = '/opt/homebrew/bin/scp'; // macOS ARM (M1/M2)
+        $possible_paths[] = 'scp'; // Fallback to PATH
 
         foreach ($possible_paths as $path) {
-            if (file_exists($path)) {
+            if (file_exists($path) || $path === 'scp') {
                 return $path;
             }
         }
@@ -56,16 +72,24 @@ class BMU_Sync
      */
     private static function find_sshpass()
     {
-        $possible_paths = array(
-            'C:\\cygwin64\\bin\\sshpass.exe',
-            'C:\\cygwin\\bin\\sshpass.exe',
-            'sshpass',
-            '/usr/bin/sshpass',
-            '/usr/local/bin/sshpass'
-        );
+        $is_windows = strtoupper(substr(PHP_OS, 0, 3)) === 'WIN';
+
+        $possible_paths = array();
+
+        if ($is_windows) {
+            // Windows-specific paths (Cygwin)
+            $possible_paths[] = 'C:\\cygwin64\\bin\\sshpass.exe';
+            $possible_paths[] = 'C:\\cygwin\\bin\\sshpass.exe';
+        }
+
+        // Unix/Linux/macOS/WSL paths
+        $possible_paths[] = '/usr/bin/sshpass';
+        $possible_paths[] = '/usr/local/bin/sshpass';
+        $possible_paths[] = '/opt/homebrew/bin/sshpass'; // macOS ARM (M1/M2)
+        $possible_paths[] = 'sshpass'; // Fallback to PATH
 
         foreach ($possible_paths as $path) {
-            if (file_exists($path)) {
+            if (file_exists($path) || $path === 'sshpass') {
                 return $path;
             }
         }
@@ -205,7 +229,7 @@ class BMU_Sync
 
             // SSH command to export remote database
             $ssh_command = sprintf(
-                '%s %s@%s "mysqldump -h %s -u %s -p%s %s > %s"',
+                '%s %s@%s "mysqldump -h %s -u %s -p%s %s > %s 2>&1"',
                 $ssh_prefix,
                 escapeshellarg($settings['ssh_user']),
                 escapeshellarg($settings['ssh_host']),
@@ -216,10 +240,13 @@ class BMU_Sync
                 escapeshellarg($remote_db_file)
             );
 
+            $output = array();
             exec($ssh_command . ' 2>&1', $output, $return_var);
 
             if ($return_var !== 0) {
-                throw new Exception('Remote database export failed');
+                $error_msg = 'Remote database export failed. Output: ' . implode("\n", $output);
+                BMU_Core::log_sync('database', 'pull', 'error', $error_msg);
+                throw new Exception($error_msg);
             }
 
             // Download the database file
@@ -232,14 +259,30 @@ class BMU_Sync
                 escapeshellarg($local_db_file)
             );
 
+            $output = array();
             exec($scp_command . ' 2>&1', $output, $return_var);
 
             if ($return_var !== 0) {
-                throw new Exception('Database download failed');
+                $error_msg = 'Database download failed. Output: ' . implode("\n", $output);
+                BMU_Core::log_sync('database', 'pull', 'error', $error_msg);
+                throw new Exception($error_msg);
             }
+
+            // Verify the file was downloaded and has content
+            if (!file_exists($local_db_file) || filesize($local_db_file) == 0) {
+                throw new Exception('Downloaded database file is empty or missing');
+            }
+
+            BMU_Core::log_sync('database', 'pull', 'info', 'Database file downloaded: ' . filesize($local_db_file) . ' bytes');
 
             // Import the database
             $import_result = BMU_Database::import_database($local_db_file);
+
+            if (!$import_result) {
+                throw new Exception('Database import to local failed');
+            }
+
+            BMU_Core::log_sync('database', 'pull', 'success', 'Database imported successfully');
 
             // Clean up remote temp file
             $cleanup_command = sprintf(
@@ -252,8 +295,17 @@ class BMU_Sync
 
             exec($cleanup_command);
 
+            // Clean up temp password file
+            if ($tmp_pass_file && file_exists($tmp_pass_file)) {
+                unlink($tmp_pass_file);
+            }
+
             return $import_result;
         } catch (Exception $e) {
+            // Clean up temp password file on error
+            if (isset($tmp_pass_file) && file_exists($tmp_pass_file)) {
+                unlink($tmp_pass_file);
+            }
             BMU_Core::log_sync('database', 'pull', 'error', $e->getMessage());
             return false;
         }
@@ -281,29 +333,36 @@ class BMU_Sync
             // Build SSH command prefix with password support
             $ssh_prefix = '';
             $scp_prefix = '';
+            $tmp_pass_file = null;
+
             if (!empty($ssh_password) && empty($settings['ssh_key_path'])) {
                 $sshpass_path = self::find_sshpass();
                 if (!$sshpass_path) {
                     throw new Exception('sshpass not found for password authentication');
                 }
 
+                // Create temp password file
+                $tmp_pass_file = tempnam(sys_get_temp_dir(), 'bmu_pass_');
+                file_put_contents($tmp_pass_file, $ssh_password);
+                chmod($tmp_pass_file, 0600);
+
                 $ssh_prefix = sprintf(
-                    '"%s" -p %s "%s" -p %s -o StrictHostKeyChecking=no',
+                    '"%s" -f %s "%s" -p %s -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null',
                     $sshpass_path,
-                    escapeshellarg($ssh_password),
+                    escapeshellarg($tmp_pass_file),
                     $ssh_path,
                     escapeshellarg($settings['ssh_port'])
                 );
                 $scp_prefix = sprintf(
-                    '"%s" -p %s "%s" -P %s -o StrictHostKeyChecking=no',
+                    '"%s" -f %s "%s" -P %s -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null',
                     $sshpass_path,
-                    escapeshellarg($ssh_password),
+                    escapeshellarg($tmp_pass_file),
                     $scp_path,
                     escapeshellarg($settings['ssh_port'])
                 );
             } else {
-                $ssh_prefix = sprintf('"%s" -p %s', $ssh_path, escapeshellarg($settings['ssh_port']));
-                $scp_prefix = sprintf('"%s" -P %s', $scp_path, escapeshellarg($settings['ssh_port']));
+                $ssh_prefix = sprintf('"%s" -p %s -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null', $ssh_path, escapeshellarg($settings['ssh_port']));
+                $scp_prefix = sprintf('"%s" -P %s -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null', $scp_path, escapeshellarg($settings['ssh_port']));
                 if (!empty($settings['ssh_key_path'])) {
                     $ssh_prefix .= ' -i ' . escapeshellarg($settings['ssh_key_path']);
                     $scp_prefix .= ' -i ' . escapeshellarg($settings['ssh_key_path']);
@@ -363,8 +422,17 @@ class BMU_Sync
 
             exec($cleanup_command);
 
+            // Clean up temp password file
+            if ($tmp_pass_file && file_exists($tmp_pass_file)) {
+                unlink($tmp_pass_file);
+            }
+
             return true;
         } catch (Exception $e) {
+            // Clean up temp password file on error
+            if (isset($tmp_pass_file) && file_exists($tmp_pass_file)) {
+                unlink($tmp_pass_file);
+            }
             BMU_Core::log_sync('database', 'push', 'error', $e->getMessage());
             return false;
         }

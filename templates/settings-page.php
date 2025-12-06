@@ -33,6 +33,11 @@ if (!defined('ABSPATH')) exit;
         <div class="bmu-card">
             <h2>SSH Connection</h2>
 
+            <div style="margin-bottom: 15px;">
+                <button type="button" id="test-ssh-btn" class="button button-secondary">Test SSH Configuration</button>
+                <div id="ssh-test-results" style="margin-top: 10px;"></div>
+            </div>
+
             <table class="form-table">
                 <tr>
                     <th><label for="ssh_host">SSH Host</label></th>

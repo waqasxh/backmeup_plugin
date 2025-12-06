@@ -11,11 +11,8 @@ class BMU_Admin
     {
         add_action('admin_menu', array(__CLASS__, 'add_admin_menu'));
         add_action('admin_enqueue_scripts', array(__CLASS__, 'enqueue_scripts'));
-        add_action('admin_init', array('BMU_Core', 'update_exclude_paths'));
         add_action('wp_ajax_bmu_sync', array(__CLASS__, 'ajax_sync'));
         add_action('wp_ajax_bmu_save_settings', array(__CLASS__, 'ajax_save_settings'));
-        add_action('wp_ajax_bmu_create_backup', array(__CLASS__, 'ajax_create_backup'));
-        add_action('wp_ajax_bmu_restore_backup', array(__CLASS__, 'ajax_restore_backup'));
         add_action('wp_ajax_bmu_delete_backup', array(__CLASS__, 'ajax_delete_backup'));
         add_action('wp_ajax_bmu_delete_all_backups', array(__CLASS__, 'ajax_delete_all_backups'));
         add_action('wp_ajax_bmu_clear_logs', array(__CLASS__, 'ajax_clear_logs'));
@@ -24,8 +21,8 @@ class BMU_Admin
     public static function add_admin_menu()
     {
         add_menu_page(
-            'BackMeUp',
-            'BackMeUp',
+            'Back Me Up',
+            'Back Me Up',
             'manage_options',
             'back-me-up',
             array(__CLASS__, 'render_main_page'),
@@ -208,49 +205,6 @@ class BMU_Admin
         }
 
         wp_send_json_success("Deleted $deleted backup file(s)");
-    }
-
-    public static function ajax_create_backup()
-    {
-        check_ajax_referer('bmu_ajax_nonce', 'nonce');
-
-        if (!current_user_can('manage_options')) {
-            wp_send_json_error('Unauthorized');
-            return;
-        }
-
-        $backup_file = BMU_Files::create_backup();
-
-        if ($backup_file) {
-            wp_send_json_success('Backup created successfully: ' . basename($backup_file));
-        } else {
-            wp_send_json_error('Failed to create backup');
-        }
-    }
-
-    public static function ajax_restore_backup()
-    {
-        check_ajax_referer('bmu_ajax_nonce', 'nonce');
-
-        if (!current_user_can('manage_options')) {
-            wp_send_json_error('Unauthorized');
-            return;
-        }
-
-        $filename = isset($_POST['filename']) ? sanitize_file_name($_POST['filename']) : '';
-
-        if (empty($filename)) {
-            wp_send_json_error('No backup file specified');
-            return;
-        }
-
-        $result = BMU_Files::restore_backup($filename);
-
-        if ($result) {
-            wp_send_json_success('Backup restored successfully');
-        } else {
-            wp_send_json_error('Failed to restore backup');
-        }
     }
 
     public static function ajax_clear_logs()

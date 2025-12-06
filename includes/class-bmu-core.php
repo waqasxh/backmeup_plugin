@@ -24,10 +24,7 @@ class BMU_Core
                 'db_user' => '',
                 'db_password' => '',
                 'exclude_paths' => array(
-                    'wp-config.php',
-                    '.htaccess',
                     'wp-content/cache',
-                    'wp-content/backup',
                     'wp-content/backups',
                     'wp-content/uploads/wc-logs'
                 ),
@@ -62,29 +59,6 @@ class BMU_Core
     {
         // Clean up any scheduled tasks if we add cron jobs later
         wp_clear_scheduled_hook('bmu_auto_sync');
-    }
-
-    /**
-     * Update existing settings with new default exclude paths
-     */
-    public static function update_exclude_paths()
-    {
-        $settings = get_option('bmu_settings');
-        if ($settings && isset($settings['exclude_paths'])) {
-            // Define critical paths that must be excluded
-            $critical_excludes = array('wp-config.php', '.htaccess', 'wp-content/backups');
-
-            // Merge critical excludes with existing ones (avoiding duplicates)
-            $current_excludes = $settings['exclude_paths'];
-            foreach ($critical_excludes as $path) {
-                if (!in_array($path, $current_excludes)) {
-                    $current_excludes[] = $path;
-                }
-            }
-
-            $settings['exclude_paths'] = $current_excludes;
-            update_option('bmu_settings', $settings);
-        }
     }
 
     public static function get_settings()

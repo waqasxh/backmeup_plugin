@@ -5,7 +5,7 @@ if (!defined('ABSPATH')) exit;
 <div class="wrap bmu-main-page">
     <h1>
         <span class="dashicons dashicons-update"></span>
-        BackMeUp - WordPress Sync
+        Back Me Up - WordPress Sync
     </h1>
 
     <div class="bmu-card">
@@ -42,21 +42,15 @@ if (!defined('ABSPATH')) exit;
         <h2>Recent Backups</h2>
 
         <p class="description">
-            <strong>Backup Location:</strong> <?php echo esc_html(str_replace('/', DIRECTORY_SEPARATOR, WP_CONTENT_DIR . '/backups')); ?>
+            <strong>Backup Location:</strong> <?php echo esc_html(WP_CONTENT_DIR . '/backups'); ?>
         </p>
 
-        <div style="margin-bottom: 15px; display: flex; gap: 10px; align-items: center;">
-            <button id="bmu-create-backup" class="button button-secondary">
-                <span class="dashicons dashicons-database-export"></span> Create Backup Now
-            </button>
-            <?php if (!empty($backups)) : ?>
+        <?php if (!empty($backups)) : ?>
+            <div style="margin-bottom: 15px;">
                 <button id="bmu-delete-all-backups" class="button button-link-delete" style="color: #b32d2e;">
                     <span class="dashicons dashicons-trash"></span> Delete All Backups
                 </button>
-            <?php endif; ?>
-        </div>
-
-        <?php if (!empty($backups)) : ?>
+            </div>
 
             <table class="wp-list-table widefat fixed striped">
                 <thead>
@@ -74,9 +68,6 @@ if (!defined('ABSPATH')) exit;
                             <td><?php echo size_format($backup['size']); ?></td>
                             <td><?php echo date('Y-m-d H:i:s', $backup['date']); ?></td>
                             <td>
-                                <button class="button button-small button-primary bmu-restore-backup" data-file="<?php echo esc_attr($backup['name']); ?>">
-                                    <span class="dashicons dashicons-database-import"></span> Restore
-                                </button>
                                 <a href="<?php echo esc_url(content_url('backups/' . $backup['name'])); ?>" class="button button-small" download>Download</a>
                                 <button class="button button-small bmu-delete-backup" data-file="<?php echo esc_attr($backup['name']); ?>">Delete</button>
                             </td>
