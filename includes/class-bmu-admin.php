@@ -11,6 +11,7 @@ class BMU_Admin
     {
         add_action('admin_menu', array(__CLASS__, 'add_admin_menu'));
         add_action('admin_enqueue_scripts', array(__CLASS__, 'enqueue_scripts'));
+        add_action('admin_init', array('BMU_Core', 'update_exclude_paths'));
         add_action('wp_ajax_bmu_sync', array(__CLASS__, 'ajax_sync'));
         add_action('wp_ajax_bmu_save_settings', array(__CLASS__, 'ajax_save_settings'));
         add_action('wp_ajax_bmu_delete_backup', array(__CLASS__, 'ajax_delete_backup'));
