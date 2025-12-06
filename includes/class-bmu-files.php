@@ -126,9 +126,9 @@ class BMU_Files
                     $rsync_path,
                     $ssh_cmd,
                     $excludes,
-                    escapeshellarg($ssh_user),
-                    escapeshellarg($ssh_host),
-                    escapeshellarg($remote_path),
+                    $ssh_user,
+                    $ssh_host,
+                    $remote_path,
                     escapeshellarg($local_path)
                 );
             } else {
@@ -139,9 +139,9 @@ class BMU_Files
                     $ssh_cmd,
                     $excludes,
                     escapeshellarg($local_path),
-                    escapeshellarg($ssh_user),
-                    escapeshellarg($ssh_host),
-                    escapeshellarg($remote_path)
+                    $ssh_user,
+                    $ssh_host,
+                    $remote_path
                 );
             }
 

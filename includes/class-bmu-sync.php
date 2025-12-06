@@ -286,7 +286,7 @@ class BMU_Sync
                 if (!$sshpass_path) {
                     throw new Exception('sshpass not found for password authentication');
                 }
-                
+
                 $ssh_prefix = sprintf(
                     '"%s" -p %s "%s" -p %s -o StrictHostKeyChecking=no',
                     $sshpass_path,

@@ -192,6 +192,7 @@ class BMU_Database
             '/usr/bin/mysqldump',
             '/usr/local/bin/mysqldump',
             '/usr/local/mysql/bin/mysqldump',
+            'C:\\Program Files\\MariaDB 12.1\\bin\\mysqldump.exe',
             'C:\\xampp\\mysql\\bin\\mysqldump.exe',
             'C:\\wamp64\\bin\\mysql\\mysql8.0.27\\bin\\mysqldump.exe',
             'C:\\Program Files\\MySQL\\MySQL Server 8.0\\bin\\mysqldump.exe'
@@ -213,6 +214,7 @@ class BMU_Database
             '/usr/bin/mysql',
             '/usr/local/bin/mysql',
             '/usr/local/mysql/bin/mysql',
+            'C:\\Program Files\\MariaDB 12.1\\bin\\mysql.exe',
             'C:\\xampp\\mysql\\bin\\mysql.exe',
             'C:\\wamp64\\bin\\mysql\\mysql8.0.27\\bin\\mysql.exe',
             'C:\\Program Files\\MySQL\\MySQL Server 8.0\\bin\\mysql.exe'
