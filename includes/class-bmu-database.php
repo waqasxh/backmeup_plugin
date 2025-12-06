@@ -8,10 +8,22 @@ class BMU_Database
 {
 
     /**
-     * Export current database to SQL file
+     * Export database to SQL file
+     * 
+     * @param string $filepath Path to save the SQL file
+     * @param string $host Database host (optional, defaults to local)
+     * @param string $user Database user (optional, defaults to local)
+     * @param string $password Database password (optional, defaults to local)
+     * @param string $name Database name (optional, defaults to local)
      */
-    public static function export_database($filepath)
+    public static function export_database($filepath, $host = null, $user = null, $password = null, $name = null)
     {
+        // Use provided credentials or fall back to WordPress constants
+        $host = $host ?: DB_HOST;
+        $user = $user ?: DB_USER;
+        $password = $password ?: DB_PASSWORD;
+        $name = $name ?: DB_NAME;
+
         try {
             // Try mysqldump first
             $mysqldump_path = self::find_mysqldump();
@@ -20,25 +32,53 @@ class BMU_Database
                 $output = array();
                 $return_var = 0;
 
+                // First try to test connection
+                $test_command = sprintf(
+                    '%s --host=%s --user=%s --password=%s -e "SELECT 1" 2>&1',
+                    escapeshellarg($mysqldump_path),
+                    escapeshellarg($host),
+                    escapeshellarg($user),
+                    escapeshellarg($password)
+                );
+
+                exec($test_command, $test_output, $test_return);
+                $test_output_str = implode("\n", $test_output);
+
+                if ($test_return !== 0) {
+                    BMU_Core::log_sync('database', 'export', 'info', 'mysqldump connection test failed: ' . $test_output_str . ' - Falling back to PHP export');
+                    // Connection failed, use PHP fallback
+                    return self::php_export_database($filepath, $host, $user, $password, $name);
+                }
+
+                // Connection successful, proceed with dump
                 $command = sprintf(
                     '%s --host=%s --user=%s --password=%s %s > %s 2>&1',
                     escapeshellarg($mysqldump_path),
-                    escapeshellarg(DB_HOST),
-                    escapeshellarg(DB_USER),
-                    escapeshellarg(DB_PASSWORD),
-                    escapeshellarg(DB_NAME),
+                    escapeshellarg($host),
+                    escapeshellarg($user),
+                    escapeshellarg($password),
+                    escapeshellarg($name),
                     escapeshellarg($filepath)
                 );
 
                 exec($command, $output, $return_var);
 
                 if ($return_var === 0 && file_exists($filepath) && filesize($filepath) > 0) {
+                    BMU_Core::log_sync('database', 'export', 'success', 'Database exported via mysqldump: ' . filesize($filepath) . ' bytes');
                     return true;
+                }
+
+                // Log the error if mysqldump failed
+                if ($return_var !== 0) {
+                    // Read the file to get error message if it was written there
+                    $file_content = file_exists($filepath) ? file_get_contents($filepath) : '';
+                    BMU_Core::log_sync('database', 'export', 'info', 'mysqldump failed, trying PHP fallback. Error: ' . $file_content);
                 }
             }
 
             // Fallback to PHP-based export if mysqldump fails
-            return self::php_export_database($filepath);
+            BMU_Core::log_sync('database', 'export', 'info', 'Using PHP-based database export...');
+            return self::php_export_database($filepath, $host, $user, $password, $name);
         } catch (Exception $e) {
             BMU_Core::log_sync('database', 'export', 'error', $e->getMessage());
             return false;
@@ -48,9 +88,21 @@ class BMU_Database
     /**
      * PHP-based database export (fallback method)
      */
-    private static function php_export_database($filepath)
+    private static function php_export_database($filepath, $host = null, $user = null, $password = null, $name = null)
     {
-        global $wpdb;
+        // Use provided credentials or fall back to WordPress constants
+        $host = $host ?: DB_HOST;
+        $user = $user ?: DB_USER;
+        $password = $password ?: DB_PASSWORD;
+        $name = $name ?: DB_NAME;
+
+        // Connect to the database
+        $wpdb_remote = new wpdb($user, $password, $name, $host);
+
+        if (!empty($wpdb_remote->error)) {
+            BMU_Core::log_sync('database', 'export', 'error', 'Database connection failed: ' . $wpdb_remote->error);
+            return false;
+        }
 
         try {
             $handle = fopen($filepath, 'w');
@@ -65,7 +117,7 @@ class BMU_Database
             fwrite($handle, "SET time_zone = \"+00:00\";\n\n");
 
             // Get all tables
-            $tables = $wpdb->get_results('SHOW TABLES', ARRAY_N);
+            $tables = $wpdb_remote->get_results('SHOW TABLES', ARRAY_N);
 
             foreach ($tables as $table) {
                 $table_name = $table[0];
@@ -75,11 +127,11 @@ class BMU_Database
                 fwrite($handle, "DROP TABLE IF EXISTS `$table_name`;\n");
 
                 // Create table statement
-                $create_table = $wpdb->get_row("SHOW CREATE TABLE `$table_name`", ARRAY_N);
+                $create_table = $wpdb_remote->get_row("SHOW CREATE TABLE `$table_name`", ARRAY_N);
                 fwrite($handle, $create_table[1] . ";\n\n");
 
                 // Insert data
-                $rows = $wpdb->get_results("SELECT * FROM `$table_name`", ARRAY_A);
+                $rows = $wpdb_remote->get_results("SELECT * FROM `$table_name`", ARRAY_A);
 
                 if (!empty($rows)) {
                     foreach ($rows as $row) {
@@ -88,7 +140,7 @@ class BMU_Database
                             if (is_null($value)) {
                                 $values[] = 'NULL';
                             } else {
-                                $values[] = "'" . $wpdb->_real_escape($value) . "'";
+                                $values[] = "'" . $wpdb_remote->_real_escape($value) . "'";
                             }
                         }
                         $insert = "INSERT INTO `$table_name` VALUES (" . implode(', ', $values) . ");\n";
@@ -99,20 +151,37 @@ class BMU_Database
             }
 
             fclose($handle);
+
+            $file_size = filesize($filepath);
+            BMU_Core::log_sync('database', 'export', 'success', 'Database exported via PHP: ' . $file_size . ' bytes from ' . count($tables) . ' tables');
+
             return true;
         } catch (Exception $e) {
             if (isset($handle)) {
                 fclose($handle);
             }
+            BMU_Core::log_sync('database', 'export', 'error', 'PHP export failed: ' . $e->getMessage());
             throw $e;
         }
     }
 
     /**
      * Import SQL file to database
+     * 
+     * @param string $filepath Path to the SQL file
+     * @param string $host Database host (optional, defaults to local)
+     * @param string $user Database user (optional, defaults to local)
+     * @param string $password Database password (optional, defaults to local)
+     * @param string $name Database name (optional, defaults to local)
      */
-    public static function import_database($filepath)
+    public static function import_database($filepath, $host = null, $user = null, $password = null, $name = null)
     {
+        // Use provided credentials or fall back to WordPress constants
+        $host = $host ?: DB_HOST;
+        $user = $user ?: DB_USER;
+        $password = $password ?: DB_PASSWORD;
+        $name = $name ?: DB_NAME;
+
         try {
             if (!file_exists($filepath)) {
                 throw new Exception('SQL file not found: ' . $filepath);
@@ -128,19 +197,21 @@ class BMU_Database
             $return_var = 0;
 
             $command = sprintf(
-                '%s --host=%s --user=%s --password=%s %s < %s',
+                '%s --host=%s --user=%s --password=%s %s < %s 2>&1',
                 escapeshellarg($mysql_path),
-                escapeshellarg(DB_HOST),
-                escapeshellarg(DB_USER),
-                escapeshellarg(DB_PASSWORD),
-                escapeshellarg(DB_NAME),
+                escapeshellarg($host),
+                escapeshellarg($user),
+                escapeshellarg($password),
+                escapeshellarg($name),
                 escapeshellarg($filepath)
             );
 
             exec($command, $output, $return_var);
 
             if ($return_var !== 0) {
-                throw new Exception('Database import failed: ' . implode("\n", $output));
+                $error_output = implode("\n", $output);
+                BMU_Core::log_sync('database', 'import', 'error', 'mysql command failed: ' . $error_output);
+                throw new Exception('Database import failed: ' . $error_output);
             }
 
             return true;

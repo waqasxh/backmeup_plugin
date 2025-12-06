@@ -1,5 +1,37 @@
 jQuery(document).ready(function ($) {
 
+    // Backup Now button
+    $('#bmu-backup-now').on('click', function () {
+        var $button = $(this);
+        var originalText = $button.html();
+
+        $button.prop('disabled', true).html('<span class="dashicons dashicons-update spin"></span>Creating Backup...');
+
+        $.ajax({
+            url: bmuAjax.ajaxurl,
+            type: 'POST',
+            data: {
+                action: 'bmu_backup_now',
+                nonce: bmuAjax.nonce
+            },
+            success: function (response) {
+                if (response.success) {
+                    $button.html('<span class="dashicons dashicons-yes"></span>Backup Created!');
+                    setTimeout(function () {
+                        location.reload();
+                    }, 1000);
+                } else {
+                    alert('Backup failed: ' + response.data.message);
+                    $button.prop('disabled', false).html(originalText);
+                }
+            },
+            error: function () {
+                alert('Backup failed. Please check the sync logs for details.');
+                $button.prop('disabled', false).html(originalText);
+            }
+        });
+    });
+
     // Sync buttons
     $('#bmu-sync-pull').on('click', function () {
         performSync('pull');
@@ -145,6 +177,41 @@ jQuery(document).ready(function ($) {
     // Remove exclude path
     $(document).on('click', '.remove-exclude-path', function () {
         $(this).closest('.exclude-path-row').remove();
+    });
+
+    // Restore backup
+    $(document).on('click', '.bmu-restore-backup', function () {
+        if (!confirm('Are you sure you want to restore this backup? This will overwrite your current files and database!')) {
+            return;
+        }
+
+        var $btn = $(this);
+        var file = $btn.data('file');
+
+        $btn.prop('disabled', true).text('Restoring...');
+
+        $.ajax({
+            url: bmuAjax.ajaxurl,
+            type: 'POST',
+            data: {
+                action: 'bmu_restore_backup',
+                backup_file: file,
+                nonce: bmuAjax.nonce
+            },
+            success: function (response) {
+                if (response.success) {
+                    alert(response.data);
+                    location.reload();
+                } else {
+                    alert('Error: ' + response.data);
+                    $btn.prop('disabled', false).text('Restore');
+                }
+            },
+            error: function () {
+                alert('Failed to restore backup. Please try again.');
+                $btn.prop('disabled', false).text('Restore');
+            }
+        });
     });
 
     // Delete single backup

@@ -45,12 +45,19 @@ if (!defined('ABSPATH')) exit;
             <strong>Backup Location:</strong> <?php echo esc_html(WP_CONTENT_DIR . '/backups'); ?>
         </p>
 
-        <?php if (!empty($backups)) : ?>
-            <div style="margin-bottom: 15px;">
+        <div style="margin-bottom: 15px; display: flex; gap: 10px; align-items: center;">
+            <button id="bmu-backup-now" class="button button-secondary">
+                <span class="dashicons dashicons-backup"></span>
+                Backup Now
+            </button>
+            <?php if (!empty($backups)) : ?>
                 <button id="bmu-delete-all-backups" class="button button-link-delete" style="color: #b32d2e;">
                     <span class="dashicons dashicons-trash"></span> Delete All Backups
                 </button>
-            </div>
+            <?php endif; ?>
+        </div>
+
+        <?php if (!empty($backups)) : ?>
 
             <table class="wp-list-table widefat fixed striped">
                 <thead>
@@ -69,6 +76,7 @@ if (!defined('ABSPATH')) exit;
                             <td><?php echo date('Y-m-d H:i:s', $backup['date']); ?></td>
                             <td>
                                 <a href="<?php echo esc_url(content_url('backups/' . $backup['name'])); ?>" class="button button-small" download>Download</a>
+                                <button class="button button-small bmu-restore-backup" data-file="<?php echo esc_attr($backup['name']); ?>">Restore</button>
                                 <button class="button button-small bmu-delete-backup" data-file="<?php echo esc_attr($backup['name']); ?>">Delete</button>
                             </td>
                         </tr>

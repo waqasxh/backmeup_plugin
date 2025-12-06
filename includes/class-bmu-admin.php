@@ -16,6 +16,8 @@ class BMU_Admin
         add_action('wp_ajax_bmu_delete_backup', array(__CLASS__, 'ajax_delete_backup'));
         add_action('wp_ajax_bmu_delete_all_backups', array(__CLASS__, 'ajax_delete_all_backups'));
         add_action('wp_ajax_bmu_clear_logs', array(__CLASS__, 'ajax_clear_logs'));
+        add_action('wp_ajax_bmu_restore_backup', array(__CLASS__, 'ajax_restore_backup'));
+        add_action('wp_ajax_bmu_backup_now', array(__CLASS__, 'ajax_backup_now'));
     }
 
     public static function add_admin_menu()
@@ -231,6 +233,60 @@ class BMU_Admin
             wp_send_json_success("Cleared $deleted log entries");
         } else {
             wp_send_json_error('Failed to clear logs');
+        }
+    }
+
+    public static function ajax_restore_backup()
+    {
+        check_ajax_referer('bmu_ajax_nonce', 'nonce');
+
+        if (!current_user_can('manage_options')) {
+            wp_send_json_error('Unauthorized');
+            return;
+        }
+
+        $backup_file = sanitize_text_field($_POST['backup_file']);
+        $backup_dir = WP_CONTENT_DIR . '/backups';
+        $full_path = $backup_dir . '/' . basename($backup_file);
+
+        if (!file_exists($full_path)) {
+            wp_send_json_error('Backup file not found');
+            return;
+        }
+
+        try {
+            $result = BMU_Files::restore_backup($full_path);
+            if ($result) {
+                wp_send_json_success('Backup restored successfully. Please refresh the page.');
+            } else {
+                wp_send_json_error('Backup restore failed');
+            }
+        } catch (Exception $e) {
+            wp_send_json_error($e->getMessage());
+        }
+    }
+
+    public static function ajax_backup_now()
+    {
+        check_ajax_referer('bmu_ajax_nonce', 'nonce');
+
+        if (!current_user_can('manage_options')) {
+            wp_send_json_error('Unauthorized');
+            return;
+        }
+
+        try {
+            $backup_file = BMU_Files::create_backup();
+            if ($backup_file) {
+                wp_send_json_success(array(
+                    'message' => 'Backup created successfully',
+                    'file' => basename($backup_file)
+                ));
+            } else {
+                wp_send_json_error('Failed to create backup');
+            }
+        } catch (Exception $e) {
+            wp_send_json_error($e->getMessage());
         }
     }
 }

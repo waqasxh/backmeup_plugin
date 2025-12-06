@@ -403,4 +403,115 @@ class BMU_Files
 
         return 'ssh'; // fallback
     }
+
+    /**
+     * Restore from a backup file
+     */
+    public static function restore_backup($backup_file)
+    {
+        try {
+            if (!file_exists($backup_file)) {
+                throw new Exception('Backup file not found');
+            }
+
+            // Extract to temporary directory
+            $temp_dir = WP_CONTENT_DIR . '/backups/temp-restore-' . time();
+            if (!file_exists($temp_dir)) {
+                wp_mkdir_p($temp_dir);
+            }
+
+            $zip = new ZipArchive();
+            if ($zip->open($backup_file) !== TRUE) {
+                throw new Exception('Could not open backup file');
+            }
+
+            $zip->extractTo($temp_dir);
+            $zip->close();
+
+            // Check if database backup exists
+            $db_file = $temp_dir . '/database-backup.sql';
+            if (file_exists($db_file)) {
+                // Import database
+                $import_result = BMU_Database::import_database($db_file);
+                if (!$import_result) {
+                    throw new Exception('Database restore failed');
+                }
+            }
+
+            // Restore files (excluding wp-config.php to preserve database credentials)
+            self::restore_files($temp_dir, ABSPATH);
+
+            // Clean up temp directory
+            self::delete_directory($temp_dir);
+
+            BMU_Core::log_sync('restore', 'local', 'success', 'Backup restored successfully');
+            return true;
+        } catch (Exception $e) {
+            // Clean up on error
+            if (isset($temp_dir) && file_exists($temp_dir)) {
+                self::delete_directory($temp_dir);
+            }
+            BMU_Core::log_sync('restore', 'local', 'error', $e->getMessage());
+            throw $e;
+        }
+    }
+
+    /**
+     * Restore files from extracted backup
+     */
+    private static function restore_files($source_dir, $dest_dir)
+    {
+        $iterator = new RecursiveIteratorIterator(
+            new RecursiveDirectoryIterator($source_dir, RecursiveDirectoryIterator::SKIP_DOTS),
+            RecursiveIteratorIterator::SELF_FIRST
+        );
+
+        foreach ($iterator as $item) {
+            $dest_path = $dest_dir . DIRECTORY_SEPARATOR . $iterator->getSubPathName();
+
+            // Skip wp-config.php to preserve current database settings
+            if (basename($dest_path) === 'wp-config.php') {
+                continue;
+            }
+
+            // Skip database backup file
+            if (basename($dest_path) === 'database-backup.sql') {
+                continue;
+            }
+
+            if ($item->isDir()) {
+                if (!file_exists($dest_path)) {
+                    wp_mkdir_p($dest_path);
+                }
+            } else {
+                copy($item, $dest_path);
+            }
+        }
+    }
+
+    /**
+     * Recursively delete a directory
+     */
+    private static function delete_directory($dir)
+    {
+        if (!file_exists($dir)) {
+            return true;
+        }
+
+        if (!is_dir($dir)) {
+            return unlink($dir);
+        }
+
+        foreach (scandir($dir) as $item) {
+            if ($item == '.' || $item == '..') {
+                continue;
+            }
+
+            if (!self::delete_directory($dir . DIRECTORY_SEPARATOR . $item)) {
+                return false;
+            }
+        }
+
+        return rmdir($dir);
+    }
 }
