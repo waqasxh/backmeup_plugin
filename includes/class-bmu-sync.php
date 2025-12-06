@@ -213,7 +213,8 @@ class BMU_Sync
 
             // Try direct database connection first (only if enabled)
             if (!empty($settings['use_direct_db'])) {
-                BMU_Core::log_sync('database', 'pull', 'info', 'Attempting direct database connection...');
+                BMU_Core::log_sync('database', 'pull', 'info', 'Attempting direct database connection from local machine...');
+                BMU_Core::log_sync('database', 'pull', 'info', 'NOTE: This will fail with IONOS/GoDaddy - uncheck "Use Direct DB" in settings');
 
                 $result = BMU_Database::export_database(
                     $local_db_file,
@@ -290,10 +291,35 @@ class BMU_Sync
             $mysqldump_cmd = 'mysqldump';
             BMU_Core::log_sync('database', 'pull', 'info', 'Using mysqldump command');
 
-            // First, try to export the database on remote server
-            // We'll capture both stdout and stderr to see any errors
+            // First, test database connection and show credentials being used
+            BMU_Core::log_sync('database', 'pull', 'info', 'Testing connection with: host=' . $settings['db_host'] . ', user=' . $settings['db_user'] . ', db=' . $settings['db_name']);
+
+            $test_command = sprintf(
+                '%s %s@%s "mysql -h %s -u %s -p\'%s\' %s -e \'SELECT 1\' 2>&1"',
+                $ssh_prefix,
+                escapeshellarg($settings['ssh_user']),
+                escapeshellarg($settings['ssh_host']),
+                escapeshellarg($settings['db_host']),
+                escapeshellarg($settings['db_user']),
+                str_replace("'", "'\\\\'", $settings['db_password']),
+                escapeshellarg($settings['db_name'])
+            );
+
+            $test_output = array();
+            exec($test_command, $test_output, $test_return);
+            $test_output_str = implode("\n", $test_output);
+
+            if ($test_return !== 0) {
+                BMU_Core::log_sync('database', 'pull', 'error', 'Database connection test failed: ' . $test_output_str);
+                throw new Exception('Cannot connect to remote database: ' . $test_output_str);
+            }
+
+            BMU_Core::log_sync('database', 'pull', 'success', 'Database connection test successful');
+
+            // Now export the database on remote server
+            // Note: Don't escape the filename for the redirect - it needs to be literal
             $ssh_command = sprintf(
-                '%s %s@%s "%s -h %s -u %s -p\'%s\' %s > %s 2>&1; if [ -s %s ]; then echo EXPORT_SUCCESS; else echo EXPORT_FAILED; fi"',
+                '%s %s@%s "cd /tmp && %s -h %s -u %s -p\'%s\' %s > %s 2>&1 && test -s %s && echo EXPORT_SUCCESS || echo EXPORT_FAILED"',
                 $ssh_prefix,
                 escapeshellarg($settings['ssh_user']),
                 escapeshellarg($settings['ssh_host']),
@@ -302,8 +328,8 @@ class BMU_Sync
                 escapeshellarg($settings['db_user']),
                 str_replace("'", "'\\\\'", $settings['db_password']),
                 escapeshellarg($settings['db_name']),
-                escapeshellarg($remote_db_file),
-                escapeshellarg($remote_db_file)
+                basename($remote_db_file),
+                basename($remote_db_file)
             );
 
             $output = array();
@@ -315,7 +341,7 @@ class BMU_Sync
 
             if ($last_line !== 'EXPORT_SUCCESS') {
                 // Log the full output to see what went wrong
-                BMU_Core::log_sync('database', 'pull', 'error', 'mysqldump failed. Full output: ' . $output_str);
+                BMU_Core::log_sync('database', 'pull', 'error', 'mysqldump failed. Error output: ' . $output_str);
                 throw new Exception('Remote database export failed: ' . $output_str);
             }
 
@@ -345,14 +371,30 @@ class BMU_Sync
                 escapeshellarg($local_db_file_arg)
             );
 
-            $output = array();
-            exec($scp_command . ' 2>/dev/null', $output, $return_var);
+            BMU_Core::log_sync('database', 'pull', 'info', 'Downloading database file from remote server...');
+            BMU_Core::log_sync('database', 'pull', 'info', 'Remote file: ' . $remote_db_file . ', Local file: ' . $local_db_file);
 
-            if ($return_var !== 0 || !file_exists($local_db_file)) {
-                throw new Exception('Database download failed: ' . implode("\n", $output));
+            $output = array();
+            exec($scp_command . ' 2>&1', $output, $return_var);
+            $scp_output = implode("\n", $output);
+
+            if ($return_var !== 0) {
+                BMU_Core::log_sync('database', 'pull', 'error', 'SCP command failed with code ' . $return_var . ': ' . $scp_output);
+                throw new Exception('Database download failed (SCP error code ' . $return_var . '): ' . $scp_output);
             }
 
-            BMU_Core::log_sync('database', 'pull', 'info', 'Database downloaded via SSH: ' . filesize($local_db_file) . ' bytes');
+            if (!file_exists($local_db_file)) {
+                BMU_Core::log_sync('database', 'pull', 'error', 'Local file not created after SCP. Output: ' . $scp_output);
+                throw new Exception('Database download failed: Local file not created after transfer');
+            }
+
+            $file_size = filesize($local_db_file);
+            if ($file_size < 100) {
+                BMU_Core::log_sync('database', 'pull', 'error', 'Downloaded file is too small (' . $file_size . ' bytes)');
+                throw new Exception('Database download failed: File size too small (' . $file_size . ' bytes)');
+            }
+
+            BMU_Core::log_sync('database', 'pull', 'info', 'Database downloaded via SSH: ' . $file_size . ' bytes');
 
             // Import the database to local
             $import_result = BMU_Database::import_database($local_db_file);
