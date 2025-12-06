@@ -115,8 +115,9 @@ class BMU_Files
                 $tmp_pass_file = str_replace('\\', '/', $tmp_pass_file);
 
                 // Use sshpass for password authentication with temp file
+                // Use single quotes within the command to avoid issues with spaces
                 $ssh_cmd = sprintf(
-                    '%s -f %s ssh -p %s -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null',
+                    "'%s' -f '%s' ssh -p %s -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null",
                     $sshpass_path,
                     $tmp_pass_file,
                     $ssh_port
