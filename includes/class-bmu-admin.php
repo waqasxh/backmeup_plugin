@@ -18,6 +18,8 @@ class BMU_Admin
         add_action('wp_ajax_bmu_clear_logs', array(__CLASS__, 'ajax_clear_logs'));
         add_action('wp_ajax_bmu_restore_backup', array(__CLASS__, 'ajax_restore_backup'));
         add_action('wp_ajax_bmu_backup_now', array(__CLASS__, 'ajax_backup_now'));
+        add_action('wp_ajax_bmu_test_ssh', array(__CLASS__, 'ajax_test_ssh'));
+        add_action('wp_ajax_bmu_test_db', array(__CLASS__, 'ajax_test_db'));
     }
 
     public static function add_admin_menu()
@@ -287,6 +289,126 @@ class BMU_Admin
             }
         } catch (Exception $e) {
             wp_send_json_error($e->getMessage());
+        }
+    }
+
+    public static function ajax_test_ssh()
+    {
+        check_ajax_referer('bmu_ajax_nonce', 'nonce');
+
+        if (!current_user_can('manage_options')) {
+            wp_send_json_error('Unauthorized');
+            return;
+        }
+
+        $settings = BMU_Core::get_settings();
+
+        if (empty($settings['ssh_host']) || empty($settings['ssh_user'])) {
+            wp_send_json_error('SSH host and username are required');
+            return;
+        }
+
+        try {
+            // Find SSH and sshpass
+            $ssh_path = BMU_Sync::find_ssh_public();
+            $sshpass_path = BMU_Sync::find_sshpass_public();
+
+            if (!$sshpass_path) {
+                wp_send_json_error('sshpass not found. Please install Cygwin with sshpass package.');
+                return;
+            }
+
+            // Create temp password file
+            $tmp_pass_file = tempnam(sys_get_temp_dir(), 'bmu_pass_');
+            file_put_contents($tmp_pass_file, $settings['ssh_password']);
+            chmod($tmp_pass_file, 0600);
+
+            // Convert Windows path to Cygwin format if needed
+            $pass_file_arg = $tmp_pass_file;
+            if (strtoupper(substr(PHP_OS, 0, 3)) === 'WIN' && strpos($sshpass_path, 'cygwin') !== false) {
+                $pass_file_arg = preg_replace('/^([A-Z]):/i', '/cygdrive/$1', str_replace('\\', '/', $tmp_pass_file));
+                $pass_file_arg = strtolower($pass_file_arg);
+            }
+
+            // Test SSH connection
+            $test_command = sprintf(
+                '"%s" -f %s "%s" -p %s -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=10 %s@%s "echo SSH_CONNECTION_SUCCESS"',
+                $sshpass_path,
+                escapeshellarg($pass_file_arg),
+                $ssh_path,
+                escapeshellarg($settings['ssh_port']),
+                escapeshellarg($settings['ssh_user']),
+                escapeshellarg($settings['ssh_host'])
+            );
+
+            $output = array();
+            exec($test_command . ' 2>&1', $output, $return_var);
+
+            // Clean up temp password file
+            if (file_exists($tmp_pass_file)) {
+                unlink($tmp_pass_file);
+            }
+
+            $output_str = implode("\n", $output);
+
+            if ($return_var === 0 && strpos($output_str, 'SSH_CONNECTION_SUCCESS') !== false) {
+                wp_send_json_success('SSH connection successful!');
+            } else {
+                wp_send_json_error('SSH connection failed: ' . $output_str);
+            }
+        } catch (Exception $e) {
+            // Clean up on error
+            if (isset($tmp_pass_file) && file_exists($tmp_pass_file)) {
+                unlink($tmp_pass_file);
+            }
+            wp_send_json_error($e->getMessage());
+        }
+    }
+
+    public static function ajax_test_db()
+    {
+        check_ajax_referer('bmu_ajax_nonce', 'nonce');
+
+        if (!current_user_can('manage_options')) {
+            wp_send_json_error('Unauthorized');
+            return;
+        }
+
+        $settings = BMU_Core::get_settings();
+
+        if (empty($settings['db_host']) || empty($settings['db_name']) || empty($settings['db_user'])) {
+            wp_send_json_error('Database host, name, and user are required');
+            return;
+        }
+
+        try {
+            // Try direct database connection
+            $wpdb_test = new wpdb(
+                $settings['db_user'],
+                $settings['db_password'],
+                $settings['db_name'],
+                $settings['db_host']
+            );
+
+            if (!empty($wpdb_test->error)) {
+                wp_send_json_error('Direct database connection failed: ' . $wpdb_test->error . ' (Will use SSH fallback during sync)');
+                return;
+            }
+
+            // Test a simple query
+            $result = $wpdb_test->get_var('SELECT 1');
+
+            if ($result == 1) {
+                // Auto-enable direct DB connection on success
+                $settings['use_direct_db'] = true;
+                BMU_Core::update_settings($settings);
+
+                wp_send_json_success('Direct database connection successful! Direct DB connection has been enabled.');
+            } else {
+                wp_send_json_error('Database connection failed: Could not execute test query (Will use SSH fallback during sync)');
+            }
+        } catch (Exception $e) {
+            wp_send_json_error('Database connection failed: ' . $e->getMessage() . ' (Will use SSH fallback during sync)');
         }
     }
 }

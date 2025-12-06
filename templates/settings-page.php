@@ -81,6 +81,11 @@ if (!defined('ABSPATH')) exit;
         <div class="bmu-card">
             <h2>Remote Database Configuration</h2>
 
+            <div style="margin-bottom: 15px;">
+                <button type="button" id="test-db-btn" class="button button-secondary">Test Database Connection</button>
+                <div id="db-test-results" style="margin-top: 10px;"></div>
+            </div>
+
             <table class="form-table">
                 <tr>
                     <th><label for="db_host">Database Host</label></th>
@@ -123,6 +128,28 @@ if (!defined('ABSPATH')) exit;
                             <option value="pull" <?php selected($settings['sync_direction'], 'pull'); ?>>Pull (Live → Local)</option>
                             <option value="push" <?php selected($settings['sync_direction'], 'push'); ?>>Push (Local → Live)</option>
                         </select>
+                    </td>
+                </tr>
+
+                <tr>
+                    <th><label for="backup_before_pull">Backup Before Pull</label></th>
+                    <td>
+                        <label>
+                            <input type="checkbox" id="backup_before_pull" name="backup_before_pull" value="1" <?php checked(!empty($settings['backup_before_pull'])); ?>>
+                            Create local backup before pulling from live server
+                        </label>
+                        <p class="description">Recommended for safety - creates a snapshot before overwriting local files</p>
+                    </td>
+                </tr>
+
+                <tr>
+                    <th><label for="use_direct_db">Use Direct Database Connection</label></th>
+                    <td>
+                        <label>
+                            <input type="checkbox" id="use_direct_db" name="use_direct_db" value="1" <?php checked(!empty($settings['use_direct_db'])); ?>>
+                            Enable direct database connection (MySQL/MariaDB on your local machine connects directly to remote database)
+                        </label>
+                        <p class="description"><strong>Note:</strong> Most hosting providers (including IONOS, GoDaddy, Bluehost) block external database connections for security. Leave this UNCHECKED unless you've specifically configured your remote database to allow external connections. Will automatically use SSH method when disabled or if connection fails. Auto-enabled only when "Test Database Connection" succeeds.</p>
                     </td>
                 </tr>
 

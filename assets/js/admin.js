@@ -108,6 +108,68 @@ jQuery(document).ready(function ($) {
         });
     }
 
+    // Test SSH button
+    $('#test-ssh-btn').on('click', function () {
+        var $button = $(this);
+        var $results = $('#ssh-test-results');
+        var originalText = $button.text();
+
+        $button.prop('disabled', true).text('Testing...');
+        $results.html('<p style="color: #666;">Testing SSH connection...</p>');
+
+        $.ajax({
+            url: bmuAjax.ajaxurl,
+            type: 'POST',
+            data: {
+                action: 'bmu_test_ssh',
+                nonce: bmuAjax.nonce
+            },
+            success: function (response) {
+                if (response.success) {
+                    $results.html('<p style="color: #46b450; font-weight: bold;">✓ ' + response.data + '</p>');
+                } else {
+                    $results.html('<p style="color: #dc3232; font-weight: bold;">✗ ' + response.data + '</p>');
+                }
+                $button.prop('disabled', false).text(originalText);
+            },
+            error: function () {
+                $results.html('<p style="color: #dc3232;">Connection test failed. Please try again.</p>');
+                $button.prop('disabled', false).text(originalText);
+            }
+        });
+    });
+
+    // Test Database button
+    $('#test-db-btn').on('click', function () {
+        var $button = $(this);
+        var $results = $('#db-test-results');
+        var originalText = $button.text();
+
+        $button.prop('disabled', true).text('Testing...');
+        $results.html('<p style="color: #666;">Testing database connection...</p>');
+
+        $.ajax({
+            url: bmuAjax.ajaxurl,
+            type: 'POST',
+            data: {
+                action: 'bmu_test_db',
+                nonce: bmuAjax.nonce
+            },
+            success: function (response) {
+                if (response.success) {
+                    $results.html('<p style="color: #46b450; font-weight: bold;">✓ ' + response.data + '</p>');
+                } else {
+                    $results.html('<p style="color: #f0ad4e; font-weight: bold;">⚠ ' + response.data + '</p>');
+                }
+                $button.prop('disabled', false).text(originalText);
+            },
+            error: function () {
+                $results.html('<p style="color: #dc3232;">Connection test failed. Please try again.</p>');
+                $button.prop('disabled', false).text(originalText);
+            }
+        });
+    });
+
     // Settings form
     $('#bmu-settings-form').on('submit', function (e) {
         e.preventDefault();

@@ -32,25 +32,9 @@ class BMU_Database
                 $output = array();
                 $return_var = 0;
 
-                // First try to test connection
-                $test_command = sprintf(
-                    '%s --host=%s --user=%s --password=%s -e "SELECT 1" 2>&1',
-                    escapeshellarg($mysqldump_path),
-                    escapeshellarg($host),
-                    escapeshellarg($user),
-                    escapeshellarg($password)
-                );
+                // Try mysqldump directly without pre-test (connection errors will be caught)
+                BMU_Core::log_sync('database', 'export', 'info', 'Attempting mysqldump export...');
 
-                exec($test_command, $test_output, $test_return);
-                $test_output_str = implode("\n", $test_output);
-
-                if ($test_return !== 0) {
-                    BMU_Core::log_sync('database', 'export', 'info', 'mysqldump connection test failed: ' . $test_output_str . ' - Falling back to PHP export');
-                    // Connection failed, use PHP fallback
-                    return self::php_export_database($filepath, $host, $user, $password, $name);
-                }
-
-                // Connection successful, proceed with dump
                 $command = sprintf(
                     '%s --host=%s --user=%s --password=%s %s > %s 2>&1',
                     escapeshellarg($mysqldump_path),
@@ -302,13 +286,18 @@ class BMU_Database
 
     private static function command_exists($command)
     {
+        // For file paths, check if file exists directly
+        if (file_exists($command)) {
+            return true;
+        }
+
         if (strtoupper(substr(PHP_OS, 0, 3)) === 'WIN') {
             $where = 'where';
         } else {
             $where = 'which';
         }
 
-        $output = shell_exec("$where $command 2>&1");
+        $output = shell_exec("$where " . escapeshellarg($command) . " 2>&1");
         return !empty($output);
     }
 }

@@ -98,6 +98,22 @@ class BMU_Sync
     }
 
     /**
+     * Public wrapper for find_ssh
+     */
+    public static function find_ssh_public()
+    {
+        return self::find_ssh();
+    }
+
+    /**
+     * Public wrapper for find_sshpass
+     */
+    public static function find_sshpass_public()
+    {
+        return self::find_sshpass();
+    }
+
+    /**
      * Perform full sync (files + database)
      */
     public static function full_sync($direction = 'pull')
@@ -111,8 +127,15 @@ class BMU_Sync
         );
 
         try {
-            // Step 1: Create backup before sync
-            BMU_Files::create_backup();
+            // Step 1: Create backup before sync (only if enabled for pull)
+            $settings = BMU_Core::get_settings();
+            $should_backup = ($direction === 'push') || (!empty($settings['backup_before_pull']));
+
+            if ($should_backup) {
+                BMU_Files::create_backup();
+            } else {
+                BMU_Core::log_sync('backup', $direction, 'info', 'Backup skipped (backup_before_pull disabled)');
+            }
 
             if ($direction === 'pull') {
                 // Pull from live to local
@@ -125,7 +148,6 @@ class BMU_Sync
 
                 // Search and replace URLs
                 if ($results['database']) {
-                    $settings = BMU_Core::get_settings();
                     $remote_url = $settings['remote_url'];
                     $local_url = get_site_url();
 
@@ -171,13 +193,13 @@ class BMU_Sync
     }
 
     /**
-     * Pull database from remote server
+     * Pull database from remote server (tries direct connection first, falls back to SSH)
      */
     private static function pull_database()
     {
         $settings = BMU_Core::get_settings();
 
-        if (empty($settings['db_host']) || empty($settings['db_name'])) {
+        if (empty($settings['db_name'])) {
             return false;
         }
 
@@ -189,27 +211,148 @@ class BMU_Sync
 
             $local_db_file = $backup_dir . '/remote-db-' . date('Y-m-d-H-i-s') . '.sql';
 
-            // Export remote database directly using mysqldump with remote host
-            BMU_Core::log_sync('database', 'pull', 'info', 'Exporting remote database...');
+            // Try direct database connection first (only if enabled)
+            if (!empty($settings['use_direct_db'])) {
+                BMU_Core::log_sync('database', 'pull', 'info', 'Attempting direct database connection...');
 
-            $result = BMU_Database::export_database(
-                $local_db_file,
-                $settings['db_host'],
-                $settings['db_user'],
-                $settings['db_password'],
-                $settings['db_name']
+                $result = BMU_Database::export_database(
+                    $local_db_file,
+                    $settings['db_host'],
+                    $settings['db_user'],
+                    $settings['db_password'],
+                    $settings['db_name']
+                );
+
+                // Check if direct connection succeeded (file exists and has reasonable size > 100 bytes)
+                if ($result && file_exists($local_db_file) && filesize($local_db_file) > 100) {
+                    BMU_Core::log_sync('database', 'pull', 'info', 'Database exported via direct connection: ' . filesize($local_db_file) . ' bytes');
+
+                    // Import the database to local
+                    $import_result = BMU_Database::import_database($local_db_file);
+
+                    if (!$import_result) {
+                        throw new Exception('Database import to local failed');
+                    }
+
+                    BMU_Core::log_sync('database', 'pull', 'success', 'Database imported successfully via direct connection');
+                    return $import_result;
+                }
+
+                // Direct connection failed or file too small, clean up and fall back to SSH method
+                if (file_exists($local_db_file)) {
+                    unlink($local_db_file);
+                }
+
+                BMU_Core::log_sync('database', 'pull', 'info', 'Direct connection failed, using SSH method...');
+            } else {
+                BMU_Core::log_sync('database', 'pull', 'info', 'Direct DB disabled, using SSH method...');
+            }
+
+            if (empty($settings['ssh_host'])) {
+                throw new Exception('SSH host not configured for fallback');
+            }
+
+            $remote_db_file = '/tmp/wp-db-export-' . time() . '.sql';
+
+            // Find executables
+            $ssh_path = self::find_ssh();
+            $scp_path = self::find_scp();
+            $sshpass_path = self::find_sshpass();
+
+            if (!$sshpass_path) {
+                throw new Exception('sshpass not found for password authentication');
+            }
+
+            // Create temp password file
+            $tmp_pass_file = tempnam(sys_get_temp_dir(), 'bmu_pass_');
+            file_put_contents($tmp_pass_file, $settings['ssh_password']);
+            chmod($tmp_pass_file, 0600);
+
+            // Convert Windows path to Cygwin format if using Cygwin
+            $pass_file_arg = $tmp_pass_file;
+            if (strtoupper(substr(PHP_OS, 0, 3)) === 'WIN' && strpos($sshpass_path, 'cygwin') !== false) {
+                $pass_file_arg = preg_replace('/^([A-Z]):/i', '/cygdrive/$1', str_replace('\\', '/', $tmp_pass_file));
+                $pass_file_arg = strtolower($pass_file_arg);
+            }
+
+            $ssh_prefix = sprintf(
+                '"%s" -f %s "%s" -p %s -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null',
+                $sshpass_path,
+                escapeshellarg($pass_file_arg),
+                $ssh_path,
+                escapeshellarg($settings['ssh_port'])
             );
 
-            if (!$result) {
-                throw new Exception('Failed to export remote database');
+            // Export database on remote server
+            BMU_Core::log_sync('database', 'pull', 'info', 'Exporting database on remote server via SSH...');
+
+            // Use standard mysqldump path (most common location)
+            $mysqldump_cmd = 'mysqldump';
+            BMU_Core::log_sync('database', 'pull', 'info', 'Using mysqldump command');
+
+            // First, try to export the database on remote server
+            // We'll capture both stdout and stderr to see any errors
+            $ssh_command = sprintf(
+                '%s %s@%s "%s -h %s -u %s -p\'%s\' %s > %s 2>&1; if [ -s %s ]; then echo EXPORT_SUCCESS; else echo EXPORT_FAILED; fi"',
+                $ssh_prefix,
+                escapeshellarg($settings['ssh_user']),
+                escapeshellarg($settings['ssh_host']),
+                $mysqldump_cmd,
+                escapeshellarg($settings['db_host']),
+                escapeshellarg($settings['db_user']),
+                str_replace("'", "'\\\\'", $settings['db_password']),
+                escapeshellarg($settings['db_name']),
+                escapeshellarg($remote_db_file),
+                escapeshellarg($remote_db_file)
+            );
+
+            $output = array();
+            exec($ssh_command, $output, $return_var);
+            $output_str = implode("\n", $output);
+
+            // Check for success marker (should be the last line)
+            $last_line = trim(end($output));
+
+            if ($last_line !== 'EXPORT_SUCCESS') {
+                // Log the full output to see what went wrong
+                BMU_Core::log_sync('database', 'pull', 'error', 'mysqldump failed. Full output: ' . $output_str);
+                throw new Exception('Remote database export failed: ' . $output_str);
             }
 
-            // Verify the file was downloaded and has content
-            if (!file_exists($local_db_file) || filesize($local_db_file) == 0) {
-                throw new Exception('Exported database file is empty or missing');
+            BMU_Core::log_sync('database', 'pull', 'success', 'Database exported on remote server');
+
+            // Download the database file using SCP
+            $local_db_file_arg = $local_db_file;
+            if (strtoupper(substr(PHP_OS, 0, 3)) === 'WIN' && strpos($scp_path, 'cygwin') !== false) {
+                $local_db_file_arg = preg_replace('/^([A-Z]):/i', '/cygdrive/$1', str_replace('\\', '/', $local_db_file));
+                $local_db_file_arg = strtolower($local_db_file_arg);
             }
 
-            BMU_Core::log_sync('database', 'pull', 'info', 'Database exported: ' . filesize($local_db_file) . ' bytes');
+            $scp_prefix = sprintf(
+                '"%s" -f %s "%s" -q -P %s -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR',
+                $sshpass_path,
+                escapeshellarg($pass_file_arg),
+                $scp_path,
+                escapeshellarg($settings['ssh_port'])
+            );
+
+            $scp_command = sprintf(
+                '%s %s@%s:%s %s',
+                $scp_prefix,
+                escapeshellarg($settings['ssh_user']),
+                escapeshellarg($settings['ssh_host']),
+                escapeshellarg($remote_db_file),
+                escapeshellarg($local_db_file_arg)
+            );
+
+            $output = array();
+            exec($scp_command . ' 2>/dev/null', $output, $return_var);
+
+            if ($return_var !== 0 || !file_exists($local_db_file)) {
+                throw new Exception('Database download failed: ' . implode("\n", $output));
+            }
+
+            BMU_Core::log_sync('database', 'pull', 'info', 'Database downloaded via SSH: ' . filesize($local_db_file) . ' bytes');
 
             // Import the database to local
             $import_result = BMU_Database::import_database($local_db_file);
@@ -218,7 +361,22 @@ class BMU_Sync
                 throw new Exception('Database import to local failed');
             }
 
-            BMU_Core::log_sync('database', 'pull', 'success', 'Database imported successfully');
+            // Clean up remote temp file
+            $cleanup_command = sprintf(
+                '%s %s@%s "rm -f %s"',
+                $ssh_prefix,
+                escapeshellarg($settings['ssh_user']),
+                escapeshellarg($settings['ssh_host']),
+                escapeshellarg($remote_db_file)
+            );
+            exec($cleanup_command);
+
+            // Clean up temp password file
+            if (file_exists($tmp_pass_file)) {
+                unlink($tmp_pass_file);
+            }
+
+            BMU_Core::log_sync('database', 'pull', 'success', 'Database imported successfully via SSH');
 
             return $import_result;
         } catch (Exception $e) {
@@ -232,43 +390,156 @@ class BMU_Sync
     }
 
     /**
-     * Push database to remote server
+     * Push database to remote server (tries direct connection first, falls back to SSH)
      */
     private static function push_database($local_db_file)
     {
         $settings = BMU_Core::get_settings();
 
-        if (empty($settings['db_host']) || empty($settings['db_name'])) {
+        if (empty($settings['db_name'])) {
             return false;
         }
 
         try {
-            BMU_Core::log_sync('database', 'push', 'info', 'Importing to remote database...');
+            // Try direct database connection first (only if enabled)
+            if (!empty($settings['use_direct_db'])) {
+                BMU_Core::log_sync('database', 'push', 'info', 'Attempting direct database import...');
 
-            // Import directly to remote database using mysql command
-            $result = BMU_Database::import_database(
-                $local_db_file,
-                $settings['db_host'],
-                $settings['db_user'],
-                $settings['db_password'],
-                $settings['db_name']
-            );
+                $result = BMU_Database::import_database(
+                    $local_db_file,
+                    $settings['db_host'],
+                    $settings['db_user'],
+                    $settings['db_password'],
+                    $settings['db_name']
+                );
 
-            if (!$result) {
-                throw new Exception('Failed to import to remote database');
+                if ($result) {
+                    BMU_Core::log_sync('database', 'push', 'success', 'Database imported to remote via direct connection');
+                    return true;
+                }
+
+                // Direct connection failed, fall back to SSH method
+                BMU_Core::log_sync('database', 'push', 'info', 'Direct connection failed, using SSH method...');
+            } else {
+                BMU_Core::log_sync('database', 'push', 'info', 'Direct DB disabled, using SSH method...');
             }
 
-            BMU_Core::log_sync('database', 'push', 'success', 'Database imported to remote successfully');
+            if (empty($settings['ssh_host'])) {
+                throw new Exception('SSH host not configured for fallback');
+            }
 
-            // Search and replace URLs on remote
-            $local_url = get_site_url();
-            $remote_url = $settings['remote_url'];
+            $remote_db_file = '/tmp/wp-db-import-' . time() . '.sql';
 
-            // This would require direct database connection for search/replace
-            // For now, we'll just return success
+            // Find executables
+            $ssh_path = self::find_ssh();
+            $scp_path = self::find_scp();
+            $sshpass_path = self::find_sshpass();
+
+            if (!$sshpass_path) {
+                throw new Exception('sshpass not found for password authentication');
+            }
+
+            // Create temp password file
+            $tmp_pass_file = tempnam(sys_get_temp_dir(), 'bmu_pass_');
+            file_put_contents($tmp_pass_file, $settings['ssh_password']);
+            chmod($tmp_pass_file, 0600);
+
+            // Convert Windows path to Cygwin format if using Cygwin
+            $pass_file_arg = $tmp_pass_file;
+            if (strtoupper(substr(PHP_OS, 0, 3)) === 'WIN' && strpos($sshpass_path, 'cygwin') !== false) {
+                $pass_file_arg = preg_replace('/^([A-Z]):/i', '/cygdrive/$1', str_replace('\\', '/', $tmp_pass_file));
+                $pass_file_arg = strtolower($pass_file_arg);
+            }
+
+            $ssh_prefix = sprintf(
+                '"%s" -f %s "%s" -q -p %s -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR',
+                $sshpass_path,
+                escapeshellarg($pass_file_arg),
+                $ssh_path,
+                escapeshellarg($settings['ssh_port'])
+            );
+
+            $scp_prefix = sprintf(
+                '"%s" -f %s "%s" -q -P %s -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR',
+                $sshpass_path,
+                escapeshellarg($pass_file_arg),
+                $scp_path,
+                escapeshellarg($settings['ssh_port'])
+            );
+
+            // Upload database file using SCP
+            BMU_Core::log_sync('database', 'push', 'info', 'Uploading database to remote server...');
+
+            $local_db_file_arg = $local_db_file;
+            if (strtoupper(substr(PHP_OS, 0, 3)) === 'WIN' && strpos($scp_path, 'cygwin') !== false) {
+                $local_db_file_arg = preg_replace('/^([A-Z]):/i', '/cygdrive/$1', str_replace('\\', '/', $local_db_file));
+                $local_db_file_arg = strtolower($local_db_file_arg);
+            }
+
+            $scp_command = sprintf(
+                '%s %s %s@%s:%s',
+                $scp_prefix,
+                escapeshellarg($local_db_file_arg),
+                escapeshellarg($settings['ssh_user']),
+                escapeshellarg($settings['ssh_host']),
+                escapeshellarg($remote_db_file)
+            );
+
+            $output = array();
+            exec($scp_command . ' 2>/dev/null', $output, $return_var);
+
+            if ($return_var !== 0) {
+                throw new Exception('Database upload failed. Check SSH connection and remote path permissions.');
+            }
+
+            BMU_Core::log_sync('database', 'push', 'info', 'Database uploaded, importing on remote server...');
+
+            // Import database on remote server
+            $ssh_command = sprintf(
+                '%s %s@%s "mysql -h %s -u %s -p\'%s\' %s < %s 2>&1 && echo IMPORT_SUCCESS || echo IMPORT_FAILED"',
+                $ssh_prefix,
+                escapeshellarg($settings['ssh_user']),
+                escapeshellarg($settings['ssh_host']),
+                escapeshellarg($settings['db_host']),
+                escapeshellarg($settings['db_user']),
+                str_replace("'", "'\\\\'", $settings['db_password']),
+                escapeshellarg($settings['db_name']),
+                escapeshellarg($remote_db_file)
+            );
+
+            $output = array();
+            exec($ssh_command . ' 2>/dev/null', $output, $return_var);
+            $output_str = implode("\n", $output);
+            $last_line = trim(end($output));
+
+            if ($last_line !== 'IMPORT_SUCCESS') {
+                BMU_Core::log_sync('database', 'push', 'error', 'mysql import failed. Output: ' . $output_str);
+                throw new Exception('Remote database import failed. Check if database credentials are correct.');
+            }
+
+            // Clean up remote temp file
+            $cleanup_command = sprintf(
+                '%s %s@%s "rm -f %s"',
+                $ssh_prefix,
+                escapeshellarg($settings['ssh_user']),
+                escapeshellarg($settings['ssh_host']),
+                escapeshellarg($remote_db_file)
+            );
+            exec($cleanup_command);
+
+            // Clean up temp password file
+            if (file_exists($tmp_pass_file)) {
+                unlink($tmp_pass_file);
+            }
+
+            BMU_Core::log_sync('database', 'push', 'success', 'Database imported to remote successfully via SSH');
 
             return true;
         } catch (Exception $e) {
+            // Clean up temp password file on error
+            if (isset($tmp_pass_file) && file_exists($tmp_pass_file)) {
+                unlink($tmp_pass_file);
+            }
             BMU_Core::log_sync('database', 'push', 'error', $e->getMessage());
             return false;
         }
