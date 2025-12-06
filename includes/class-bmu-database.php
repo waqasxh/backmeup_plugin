@@ -13,35 +13,98 @@ class BMU_Database
     public static function export_database($filepath)
     {
         try {
-            $output = array();
-            $return_var = 0;
-
+            // Try mysqldump first
             $mysqldump_path = self::find_mysqldump();
 
-            if (!$mysqldump_path) {
-                throw new Exception('mysqldump not found. Please configure the path manually.');
+            if ($mysqldump_path) {
+                $output = array();
+                $return_var = 0;
+
+                $command = sprintf(
+                    '%s --host=%s --user=%s --password=%s %s > %s 2>&1',
+                    escapeshellarg($mysqldump_path),
+                    escapeshellarg(DB_HOST),
+                    escapeshellarg(DB_USER),
+                    escapeshellarg(DB_PASSWORD),
+                    escapeshellarg(DB_NAME),
+                    escapeshellarg($filepath)
+                );
+
+                exec($command, $output, $return_var);
+
+                if ($return_var === 0 && file_exists($filepath) && filesize($filepath) > 0) {
+                    return true;
+                }
             }
 
-            $command = sprintf(
-                '%s --host=%s --user=%s --password=%s %s > %s',
-                escapeshellarg($mysqldump_path),
-                escapeshellarg(DB_HOST),
-                escapeshellarg(DB_USER),
-                escapeshellarg(DB_PASSWORD),
-                escapeshellarg(DB_NAME),
-                escapeshellarg($filepath)
-            );
-
-            exec($command, $output, $return_var);
-
-            if ($return_var !== 0) {
-                throw new Exception('Database export failed: ' . implode("\n", $output));
-            }
-
-            return true;
+            // Fallback to PHP-based export if mysqldump fails
+            return self::php_export_database($filepath);
         } catch (Exception $e) {
             BMU_Core::log_sync('database', 'export', 'error', $e->getMessage());
             return false;
+        }
+    }
+
+    /**
+     * PHP-based database export (fallback method)
+     */
+    private static function php_export_database($filepath)
+    {
+        global $wpdb;
+
+        try {
+            $handle = fopen($filepath, 'w');
+            if (!$handle) {
+                throw new Exception('Could not open file for writing');
+            }
+
+            // Write header
+            fwrite($handle, "-- WordPress Database Backup\n");
+            fwrite($handle, "-- Generated: " . date('Y-m-d H:i:s') . "\n\n");
+            fwrite($handle, "SET SQL_MODE = \"NO_AUTO_VALUE_ON_ZERO\";\n");
+            fwrite($handle, "SET time_zone = \"+00:00\";\n\n");
+
+            // Get all tables
+            $tables = $wpdb->get_results('SHOW TABLES', ARRAY_N);
+
+            foreach ($tables as $table) {
+                $table_name = $table[0];
+
+                // Drop table statement
+                fwrite($handle, "\n-- Table: $table_name\n");
+                fwrite($handle, "DROP TABLE IF EXISTS `$table_name`;\n");
+
+                // Create table statement
+                $create_table = $wpdb->get_row("SHOW CREATE TABLE `$table_name`", ARRAY_N);
+                fwrite($handle, $create_table[1] . ";\n\n");
+
+                // Insert data
+                $rows = $wpdb->get_results("SELECT * FROM `$table_name`", ARRAY_A);
+
+                if (!empty($rows)) {
+                    foreach ($rows as $row) {
+                        $values = array();
+                        foreach ($row as $value) {
+                            if (is_null($value)) {
+                                $values[] = 'NULL';
+                            } else {
+                                $values[] = "'" . $wpdb->_real_escape($value) . "'";
+                            }
+                        }
+                        $insert = "INSERT INTO `$table_name` VALUES (" . implode(', ', $values) . ");\n";
+                        fwrite($handle, $insert);
+                    }
+                    fwrite($handle, "\n");
+                }
+            }
+
+            fclose($handle);
+            return true;
+        } catch (Exception $e) {
+            if (isset($handle)) {
+                fclose($handle);
+            }
+            throw $e;
         }
     }
 

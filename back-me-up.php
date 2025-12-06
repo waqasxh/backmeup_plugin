@@ -5,8 +5,8 @@
  * Plugin URI: https://a2zsystems.com
  * Description: One-click solution to sync WordPress installation between local and live environments
  * Version: 1.0.0
- * Author: A2Z Systems
- * Author URI: https://a2zsystems.com
+ * Author: NextGen Digital
+ * Author URI: https://nextgendigital.uk/
  * License: GPL v2 or later
  * License URI: https://www.gnu.org/licenses/gpl-2.0.html
  * Text Domain: back-me-up

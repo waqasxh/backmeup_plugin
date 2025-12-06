@@ -111,6 +111,10 @@ class BMU_Files
 
             // Export database first
             $db_exported = BMU_Database::export_database($db_file);
+            
+            if (!$db_exported) {
+                BMU_Core::log_sync('backup', 'local', 'warning', 'Database export failed - backup will only contain files');
+            }
 
             $zip = new ZipArchive();
             if ($zip->open($backup_file, ZipArchive::CREATE) !== TRUE) {
@@ -120,12 +124,18 @@ class BMU_Files
             $settings = BMU_Core::get_settings();
             $exclude_paths = !empty($settings['exclude_paths']) ? $settings['exclude_paths'] : array();
 
-            // Add files to zip
+            // Add files to zip (skip wp-content/backups to avoid recursive backup)
+            $exclude_paths[] = 'wp-content/backups';
             self::add_directory_to_zip($zip, ABSPATH, ABSPATH, $exclude_paths);
 
             // Add database export to zip if successful
             if ($db_exported && file_exists($db_file)) {
-                $zip->addFile($db_file, 'database-backup.sql');
+                $db_size = filesize($db_file);
+                if ($db_size > 0) {
+                    $zip->addFile($db_file, 'database-backup.sql');
+                } else {
+                    BMU_Core::log_sync('backup', 'local', 'warning', 'Database file is empty - skipping');
+                }
             }
 
             $zip->close();
@@ -139,6 +149,8 @@ class BMU_Files
             $message = 'Backup created: ' . basename($backup_file) . ' (' . size_format($backup_size) . ')';
             if ($db_exported) {
                 $message .= ' - includes database';
+            } else {
+                $message .= ' - files only (database export failed)';
             }
 
             BMU_Core::log_sync('backup', 'local', 'success', $message);

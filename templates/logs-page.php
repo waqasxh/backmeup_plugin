@@ -12,7 +12,7 @@ if (!defined('ABSPATH')) exit;
                     <span class="dashicons dashicons-trash"></span> Clear All Logs
                 </button>
             </div>
-            
+
             <table class="wp-list-table widefat fixed striped">
                 <thead>
                     <tr>
