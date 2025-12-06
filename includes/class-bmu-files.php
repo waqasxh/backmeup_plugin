@@ -97,7 +97,7 @@ class BMU_Files
             // Build SSH command with password support using sshpass if password is provided
             $ssh_cmd = '';
             $tmp_pass_file = null;
-            
+
             if (!empty($ssh_password) && empty($settings['ssh_key_path'])) {
                 // Find sshpass
                 $sshpass_path = self::find_sshpass();
@@ -125,30 +125,37 @@ class BMU_Files
                 }
             }
 
+            // Convert local path for Cygwin if on Windows
+            $local_path_for_rsync = $local_path;
+            if (DIRECTORY_SEPARATOR === '\\' && preg_match('/^[A-Z]:\\\\/i', $local_path)) {
+                // Convert Windows path to Cygwin format: C:\path\to -> /cygdrive/c/path/to
+                $drive = strtolower(substr($local_path, 0, 1));
+                $path = str_replace('\\', '/', substr($local_path, 3));
+                $local_path_for_rsync = '/cygdrive/' . $drive . '/' . $path;
+            }
+
             // Build rsync command
             if ($direction === 'pull') {
                 // Pull from remote to local
+                $remote_spec = $ssh_user . '@' . $ssh_host . ':' . $remote_path . '/';
                 $command = sprintf(
-                    '%s -avz -e %s %s %s@%s:%s/ %s',
+                    '%s -avz -e %s %s %s %s',
                     escapeshellarg($rsync_path),
                     escapeshellarg($ssh_cmd),
                     $excludes,
-                    escapeshellarg($ssh_user),
-                    escapeshellarg($ssh_host),
-                    escapeshellarg($remote_path),
-                    escapeshellarg($local_path)
+                    escapeshellarg($remote_spec),
+                    escapeshellarg($local_path_for_rsync)
                 );
             } else {
                 // Push from local to remote
+                $remote_spec = $ssh_user . '@' . $ssh_host . ':' . $remote_path . '/';
                 $command = sprintf(
-                    '%s -avz -e %s %s %s %s@%s:%s/',
+                    '%s -avz -e %s %s %s %s',
                     escapeshellarg($rsync_path),
                     escapeshellarg($ssh_cmd),
                     $excludes,
-                    escapeshellarg($local_path),
-                    escapeshellarg($ssh_user),
-                    escapeshellarg($ssh_host),
-                    escapeshellarg($remote_path)
+                    escapeshellarg($local_path_for_rsync),
+                    escapeshellarg($remote_spec)
                 );
             }
 
