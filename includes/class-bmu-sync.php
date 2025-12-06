@@ -215,12 +215,12 @@ class BMU_Sync
                     '"%s" -p %s "%s" -P %s -o StrictHostKeyChecking=no',
                     $sshpass_path,
                     escapeshellarg($ssh_password),
-                    $scp_path,
+                    $scp_prefix,
                     escapeshellarg($settings['ssh_port'])
                 );
             } else {
-                $ssh_prefix = sprintf('"%s" -p %s', $ssh_path, escapeshellarg($settings['ssh_port']));
-                $scp_prefix = sprintf('"%s" -P %s', $scp_path, escapeshellarg($settings['ssh_port']));
+                $ssh_prefix = sprintf('"%s" -p %s -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null', $ssh_path, escapeshellarg($settings['ssh_port']));
+                $scp_prefix = sprintf('"%s" -P %s -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null', $scp_path, escapeshellarg($settings['ssh_port']));
                 if (!empty($settings['ssh_key_path'])) {
                     $ssh_prefix .= ' -i ' . escapeshellarg($settings['ssh_key_path']);
                     $scp_prefix .= ' -i ' . escapeshellarg($settings['ssh_key_path']);

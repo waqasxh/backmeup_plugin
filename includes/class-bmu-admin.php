@@ -120,6 +120,12 @@ class BMU_Admin
             return;
         }
 
+        // Clean exclude paths to remove duplicates and empty entries
+        $exclude_paths = array_map('sanitize_text_field', $_POST['exclude_paths']);
+        $exclude_paths = array_filter($exclude_paths); // Remove empty values
+        $exclude_paths = array_unique($exclude_paths); // Remove duplicates
+        $exclude_paths = array_values($exclude_paths); // Re-index array
+
         $settings = array(
             'remote_url' => sanitize_text_field($_POST['remote_url']),
             'remote_path' => sanitize_text_field($_POST['remote_path']),
@@ -132,7 +138,7 @@ class BMU_Admin
             'db_name' => sanitize_text_field($_POST['db_name']),
             'db_user' => sanitize_text_field($_POST['db_user']),
             'db_password' => sanitize_text_field($_POST['db_password']),
-            'exclude_paths' => array_map('sanitize_text_field', $_POST['exclude_paths']),
+            'exclude_paths' => $exclude_paths,
             'sync_direction' => sanitize_text_field($_POST['sync_direction'])
         );
 
