@@ -8,6 +8,59 @@ class BMU_Files
 {
 
     /**
+     * Find rsync executable
+     */
+    private static function find_rsync()
+    {
+        $possible_paths = array(
+            'C:\\cygwin64\\bin\\rsync.exe',
+            'C:\\cygwin\\bin\\rsync.exe',
+            'rsync', // For systems where it's in PATH
+            '/usr/bin/rsync',
+            '/usr/local/bin/rsync'
+        );
+
+        foreach ($possible_paths as $path) {
+            if (file_exists($path) || self::command_exists($path)) {
+                return $path;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Find sshpass executable
+     */
+    private static function find_sshpass()
+    {
+        $possible_paths = array(
+            'C:\\cygwin64\\bin\\sshpass.exe',
+            'C:\\cygwin\\bin\\sshpass.exe',
+            'sshpass',
+            '/usr/bin/sshpass',
+            '/usr/local/bin/sshpass'
+        );
+
+        foreach ($possible_paths as $path) {
+            if (file_exists($path) || self::command_exists($path)) {
+                return $path;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Check if command exists
+     */
+    private static function command_exists($command)
+    {
+        $test = shell_exec(sprintf("which %s 2>/dev/null", escapeshellarg($command)));
+        return !empty($test);
+    }
+
+    /**
      * Sync files using rsync (requires rsync installed)
      */
     public static function sync_files($direction = 'pull')
@@ -20,6 +73,12 @@ class BMU_Files
         }
 
         try {
+            // Find rsync
+            $rsync_path = self::find_rsync();
+            if (!$rsync_path) {
+                throw new Exception('rsync not found. Please install rsync (Cygwin on Windows)');
+            }
+
             $local_path = ABSPATH;
             $remote_path = $settings['remote_path'];
             $ssh_user = $settings['ssh_user'];
@@ -38,9 +97,16 @@ class BMU_Files
             // Build SSH command with password support using sshpass if password is provided
             $ssh_cmd = '';
             if (!empty($ssh_password) && empty($settings['ssh_key_path'])) {
+                // Find sshpass
+                $sshpass_path = self::find_sshpass();
+                if (!$sshpass_path) {
+                    throw new Exception('sshpass not found. Please install sshpass or use SSH key authentication');
+                }
+
                 // Use sshpass for password authentication
                 $ssh_cmd = sprintf(
-                    'sshpass -p %s ssh -p %s -o StrictHostKeyChecking=no',
+                    '"%s" -p %s ssh -p %s -o StrictHostKeyChecking=no',
+                    $sshpass_path,
                     escapeshellarg($ssh_password),
                     escapeshellarg($ssh_port)
                 );
@@ -56,7 +122,8 @@ class BMU_Files
             if ($direction === 'pull') {
                 // Pull from remote to local
                 $command = sprintf(
-                    'rsync -avz -e "%s" %s %s@%s:%s/ %s',
+                    '"%s" -avz -e "%s" %s %s@%s:%s/ %s',
+                    $rsync_path,
                     $ssh_cmd,
                     $excludes,
                     escapeshellarg($ssh_user),
@@ -67,7 +134,8 @@ class BMU_Files
             } else {
                 // Push from local to remote
                 $command = sprintf(
-                    'rsync -avz -e "%s" %s %s %s@%s:%s/',
+                    '"%s" -avz -e "%s" %s %s %s@%s:%s/',
+                    $rsync_path,
                     $ssh_cmd,
                     $excludes,
                     escapeshellarg($local_path),
@@ -111,7 +179,7 @@ class BMU_Files
 
             // Export database first
             $db_exported = BMU_Database::export_database($db_file);
-            
+
             if (!$db_exported) {
                 BMU_Core::log_sync('backup', 'local', 'warning', 'Database export failed - backup will only contain files');
             }

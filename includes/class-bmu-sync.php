@@ -8,6 +8,72 @@ class BMU_Sync
 {
 
     /**
+     * Find SSH executable
+     */
+    private static function find_ssh()
+    {
+        $possible_paths = array(
+            'C:\\cygwin64\\bin\\ssh.exe',
+            'C:\\cygwin\\bin\\ssh.exe',
+            'ssh',
+            '/usr/bin/ssh',
+            '/usr/local/bin/ssh'
+        );
+
+        foreach ($possible_paths as $path) {
+            if (file_exists($path)) {
+                return $path;
+            }
+        }
+
+        return 'ssh'; // Fallback
+    }
+
+    /**
+     * Find SCP executable
+     */
+    private static function find_scp()
+    {
+        $possible_paths = array(
+            'C:\\cygwin64\\bin\\scp.exe',
+            'C:\\cygwin\\bin\\scp.exe',
+            'scp',
+            '/usr/bin/scp',
+            '/usr/local/bin/scp'
+        );
+
+        foreach ($possible_paths as $path) {
+            if (file_exists($path)) {
+                return $path;
+            }
+        }
+
+        return 'scp'; // Fallback
+    }
+
+    /**
+     * Find sshpass executable
+     */
+    private static function find_sshpass()
+    {
+        $possible_paths = array(
+            'C:\\cygwin64\\bin\\sshpass.exe',
+            'C:\\cygwin\\bin\\sshpass.exe',
+            'sshpass',
+            '/usr/bin/sshpass',
+            '/usr/local/bin/sshpass'
+        );
+
+        foreach ($possible_paths as $path) {
+            if (file_exists($path)) {
+                return $path;
+            }
+        }
+
+        return false;
+    }
+
+    /**
      * Perform full sync (files + database)
      */
     public static function full_sync($direction = 'pull')
@@ -101,23 +167,36 @@ class BMU_Sync
             $local_db_file = $backup_dir . '/remote-db-' . date('Y-m-d-H-i-s') . '.sql';
             $ssh_password = !empty($settings['ssh_password']) ? $settings['ssh_password'] : '';
 
+            // Find executables
+            $ssh_path = self::find_ssh();
+            $scp_path = self::find_scp();
+
             // Build SSH command prefix with password support
             $ssh_prefix = '';
             $scp_prefix = '';
             if (!empty($ssh_password) && empty($settings['ssh_key_path'])) {
+                $sshpass_path = self::find_sshpass();
+                if (!$sshpass_path) {
+                    throw new Exception('sshpass not found for password authentication');
+                }
+
                 $ssh_prefix = sprintf(
-                    'sshpass -p %s ssh -p %s -o StrictHostKeyChecking=no',
+                    '"%s" -p %s "%s" -p %s -o StrictHostKeyChecking=no',
+                    $sshpass_path,
                     escapeshellarg($ssh_password),
+                    $ssh_path,
                     escapeshellarg($settings['ssh_port'])
                 );
                 $scp_prefix = sprintf(
-                    'sshpass -p %s scp -P %s -o StrictHostKeyChecking=no',
+                    '"%s" -p %s "%s" -P %s -o StrictHostKeyChecking=no',
+                    $sshpass_path,
                     escapeshellarg($ssh_password),
+                    $scp_path,
                     escapeshellarg($settings['ssh_port'])
                 );
             } else {
-                $ssh_prefix = sprintf('ssh -p %s', escapeshellarg($settings['ssh_port']));
-                $scp_prefix = sprintf('scp -P %s', escapeshellarg($settings['ssh_port']));
+                $ssh_prefix = sprintf('"%s" -p %s', $ssh_path, escapeshellarg($settings['ssh_port']));
+                $scp_prefix = sprintf('"%s" -P %s', $scp_path, escapeshellarg($settings['ssh_port']));
                 if (!empty($settings['ssh_key_path'])) {
                     $ssh_prefix .= ' -i ' . escapeshellarg($settings['ssh_key_path']);
                     $scp_prefix .= ' -i ' . escapeshellarg($settings['ssh_key_path']);
@@ -195,23 +274,36 @@ class BMU_Sync
             $remote_db_file = '/tmp/wp-db-import-' . time() . '.sql';
             $ssh_password = !empty($settings['ssh_password']) ? $settings['ssh_password'] : '';
 
+            // Find executables
+            $ssh_path = self::find_ssh();
+            $scp_path = self::find_scp();
+
             // Build SSH command prefix with password support
             $ssh_prefix = '';
             $scp_prefix = '';
             if (!empty($ssh_password) && empty($settings['ssh_key_path'])) {
+                $sshpass_path = self::find_sshpass();
+                if (!$sshpass_path) {
+                    throw new Exception('sshpass not found for password authentication');
+                }
+                
                 $ssh_prefix = sprintf(
-                    'sshpass -p %s ssh -p %s -o StrictHostKeyChecking=no',
+                    '"%s" -p %s "%s" -p %s -o StrictHostKeyChecking=no',
+                    $sshpass_path,
                     escapeshellarg($ssh_password),
+                    $ssh_path,
                     escapeshellarg($settings['ssh_port'])
                 );
                 $scp_prefix = sprintf(
-                    'sshpass -p %s scp -P %s -o StrictHostKeyChecking=no',
+                    '"%s" -p %s "%s" -P %s -o StrictHostKeyChecking=no',
+                    $sshpass_path,
                     escapeshellarg($ssh_password),
+                    $scp_path,
                     escapeshellarg($settings['ssh_port'])
                 );
             } else {
-                $ssh_prefix = sprintf('ssh -p %s', escapeshellarg($settings['ssh_port']));
-                $scp_prefix = sprintf('scp -P %s', escapeshellarg($settings['ssh_port']));
+                $ssh_prefix = sprintf('"%s" -p %s', $ssh_path, escapeshellarg($settings['ssh_port']));
+                $scp_prefix = sprintf('"%s" -P %s', $scp_path, escapeshellarg($settings['ssh_port']));
                 if (!empty($settings['ssh_key_path'])) {
                     $ssh_prefix .= ' -i ' . escapeshellarg($settings['ssh_key_path']);
                     $scp_prefix .= ' -i ' . escapeshellarg($settings['ssh_key_path']);
