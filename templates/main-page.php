@@ -49,11 +49,11 @@ if (!defined('ABSPATH')) exit;
             <button id="bmu-create-backup" class="button button-secondary">
                 <span class="dashicons dashicons-database-export"></span> Create Backup Now
             </button>
-        <?php if (!empty($backups)) : ?>
-            <button id="bmu-delete-all-backups" class="button button-link-delete" style="color: #b32d2e;">
-                <span class="dashicons dashicons-trash"></span> Delete All Backups
-            </button>
-        <?php endif; ?>
+            <?php if (!empty($backups)) : ?>
+                <button id="bmu-delete-all-backups" class="button button-link-delete" style="color: #b32d2e;">
+                    <span class="dashicons dashicons-trash"></span> Delete All Backups
+                </button>
+            <?php endif; ?>
         </div>
 
         <?php if (!empty($backups)) : ?>

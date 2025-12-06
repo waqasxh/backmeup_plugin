@@ -96,6 +96,8 @@ class BMU_Files
 
             // Build SSH command with password support using sshpass if password is provided
             $ssh_cmd = '';
+            $tmp_pass_file = null;
+            
             if (!empty($ssh_password) && empty($settings['ssh_key_path'])) {
                 // Find sshpass
                 $sshpass_path = self::find_sshpass();
@@ -103,16 +105,21 @@ class BMU_Files
                     throw new Exception('sshpass not found. Please install sshpass or use SSH key authentication');
                 }
 
-                // Use sshpass for password authentication
+                // Create temporary password file for sshpass
+                $tmp_pass_file = tempnam(sys_get_temp_dir(), 'bmu_ssh_');
+                file_put_contents($tmp_pass_file, $ssh_password);
+                chmod($tmp_pass_file, 0600);
+
+                // Use sshpass for password authentication with temp file
                 $ssh_cmd = sprintf(
-                    '"%s" -p %s ssh -p %s -o StrictHostKeyChecking=no',
-                    $sshpass_path,
-                    escapeshellarg($ssh_password),
+                    '%s -f %s ssh -p %s -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null',
+                    escapeshellarg($sshpass_path),
+                    escapeshellarg($tmp_pass_file),
                     escapeshellarg($ssh_port)
                 );
             } else {
                 // Use key-based authentication
-                $ssh_cmd = sprintf('ssh -p %s', escapeshellarg($ssh_port));
+                $ssh_cmd = sprintf('ssh -p %s -o StrictHostKeyChecking=no', escapeshellarg($ssh_port));
                 if (!empty($settings['ssh_key_path'])) {
                     $ssh_cmd .= ' -i ' . escapeshellarg($settings['ssh_key_path']);
                 }
@@ -122,32 +129,37 @@ class BMU_Files
             if ($direction === 'pull') {
                 // Pull from remote to local
                 $command = sprintf(
-                    '"%s" -avz -e "%s" %s %s@%s:%s/ %s',
-                    $rsync_path,
-                    $ssh_cmd,
+                    '%s -avz -e %s %s %s@%s:%s/ %s',
+                    escapeshellarg($rsync_path),
+                    escapeshellarg($ssh_cmd),
                     $excludes,
-                    $ssh_user,
-                    $ssh_host,
-                    $remote_path,
+                    escapeshellarg($ssh_user),
+                    escapeshellarg($ssh_host),
+                    escapeshellarg($remote_path),
                     escapeshellarg($local_path)
                 );
             } else {
                 // Push from local to remote
                 $command = sprintf(
-                    '"%s" -avz -e "%s" %s %s %s@%s:%s/',
-                    $rsync_path,
-                    $ssh_cmd,
+                    '%s -avz -e %s %s %s %s@%s:%s/',
+                    escapeshellarg($rsync_path),
+                    escapeshellarg($ssh_cmd),
                     $excludes,
                     escapeshellarg($local_path),
-                    $ssh_user,
-                    $ssh_host,
-                    $remote_path
+                    escapeshellarg($ssh_user),
+                    escapeshellarg($ssh_host),
+                    escapeshellarg($remote_path)
                 );
             }
 
             $output = array();
             $return_var = 0;
             exec($command . ' 2>&1', $output, $return_var);
+
+            // Clean up temporary password file
+            if ($tmp_pass_file && file_exists($tmp_pass_file)) {
+                unlink($tmp_pass_file);
+            }
 
             if ($return_var !== 0) {
                 throw new Exception('File sync failed: ' . implode("\n", $output));
@@ -156,6 +168,10 @@ class BMU_Files
             BMU_Core::log_sync('files', $direction, 'success', 'Files synced successfully');
             return true;
         } catch (Exception $e) {
+            // Clean up temporary password file on error
+            if (isset($tmp_pass_file) && $tmp_pass_file && file_exists($tmp_pass_file)) {
+                unlink($tmp_pass_file);
+            }
             BMU_Core::log_sync('files', $direction, 'error', $e->getMessage());
             return false;
         }
