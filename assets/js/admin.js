@@ -288,7 +288,7 @@ jQuery(document).ready(function ($) {
 
         var $btn = $(this);
         var filename = $btn.data('file');
-        
+
         $btn.prop('disabled', true).html('<span class="dashicons dashicons-update dashicons-spin"></span> Restoring...');
 
         $.ajax({

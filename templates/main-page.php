@@ -45,18 +45,18 @@ if (!defined('ABSPATH')) exit;
             <strong>Backup Location:</strong> <?php echo esc_html(str_replace('/', DIRECTORY_SEPARATOR, WP_CONTENT_DIR . '/backups')); ?>
         </p>
 
-        <div style="margin-bottom: 15px;">
+        <div style="margin-bottom: 15px; display: flex; gap: 10px; align-items: center;">
             <button id="bmu-create-backup" class="button button-secondary">
                 <span class="dashicons dashicons-database-export"></span> Create Backup Now
             </button>
+        <?php if (!empty($backups)) : ?>
+            <button id="bmu-delete-all-backups" class="button button-link-delete" style="color: #b32d2e;">
+                <span class="dashicons dashicons-trash"></span> Delete All Backups
+            </button>
+        <?php endif; ?>
         </div>
 
         <?php if (!empty($backups)) : ?>
-            <div style="margin-bottom: 15px;">
-                <button id="bmu-delete-all-backups" class="button button-link-delete" style="color: #b32d2e;">
-                    <span class="dashicons dashicons-trash"></span> Delete All Backups
-                </button>
-            </div>
 
             <table class="wp-list-table widefat fixed striped">
                 <thead>
