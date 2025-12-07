@@ -4,42 +4,12 @@ if (!defined('ABSPATH')) exit;
 
 <div class="wrap bmu-main-page">
     <h1>
-        <span class="dashicons dashicons-update"></span>
-        Back Me Up - WordPress Sync
+        <span class="dashicons dashicons-backup"></span>
+        Back Me Up - Backup & Restore
     </h1>
 
     <div class="bmu-card">
-        <h2>Quick Sync</h2>
-
-        <div class="bmu-sync-status">
-            <p><strong>Last Sync:</strong> <?php echo esc_html($last_sync); ?></p>
-            <p><strong>Environment:</strong> <?php echo defined('WP_LOCAL_DEV') ? 'Local' : 'Live'; ?></p>
-        </div>
-
-        <div class="bmu-sync-buttons">
-            <button id="bmu-sync-pull" class="button button-primary button-large">
-                <span class="dashicons dashicons-download"></span>
-                Pull from Live
-            </button>
-
-            <button id="bmu-sync-push" class="button button-secondary button-large">
-                <span class="dashicons dashicons-upload"></span>
-                Push to Live
-            </button>
-        </div>
-
-        <div id="bmu-sync-progress" style="display: none;">
-            <div class="bmu-progress-bar">
-                <div class="bmu-progress-fill"></div>
-            </div>
-            <p id="bmu-sync-message">Syncing...</p>
-        </div>
-
-        <div id="bmu-sync-result" style="display: none;"></div>
-    </div>
-
-    <div class="bmu-card">
-        <h2>Recent Backups</h2>
+        <h2>Backup Management</h2>
 
         <p class="description">
             <strong>Backup Location:</strong> <?php echo esc_html(WP_CONTENT_DIR . '/backups'); ?>
@@ -84,22 +54,25 @@ if (!defined('ABSPATH')) exit;
                 </tbody>
             </table>
         <?php else : ?>
-            <p>No backups found. Backups are created automatically before each sync.</p>
+            <p>No backups found. Create a backup to get started.</p>
         <?php endif; ?>
     </div>
 
     <div class="bmu-card">
-        <h2>Quick Start Guide</h2>
+        <h2>How It Works</h2>
         <ol>
-            <li>Configure your <a href="<?php echo admin_url('admin.php?page=back-me-up-settings'); ?>">connection settings</a> first</li>
-            <li>Ensure SSH access is configured with key-based authentication</li>
-            <li>Install rsync on both local and remote servers</li>
-            <li>Click "Pull from Live" to sync live site to local</li>
-            <li>Click "Push to Live" to sync local changes to live site</li>
+            <li><strong>Create Backup:</strong> Click "Backup Now" to create a complete backup (files + database) of this WordPress installation</li>
+            <li><strong>Download:</strong> Download backup files to transfer between servers</li>
+            <li><strong>Upload & Restore:</strong> Upload a backup file to the backups folder (<code><?php echo esc_html(WP_CONTENT_DIR . '/backups'); ?></code>) and it will appear in the list above</li>
+            <li><strong>Automatic URL Replacement:</strong> URLs are automatically updated when restoring between different domains</li>
         </ol>
 
-        <div class="notice notice-warning inline">
-            <p><strong>Warning:</strong> Always create a backup before syncing. Syncing will overwrite files and database on the target environment.</p>
+        <div class="notice notice-info inline">
+            <p><strong>✓ Cross-Platform:</strong> Works on Windows, Mac, and Linux. No external dependencies required!</p>
+        </div>
+
+        <div class="notice notice-warning inline" style="margin-top: 10px;">
+            <p><strong>Warning:</strong> Restoring a backup will overwrite all files and database content on this WordPress installation. Always backup before restoring!</p>
         </div>
     </div>
 </div>

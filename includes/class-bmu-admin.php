@@ -11,15 +11,12 @@ class BMU_Admin
     {
         add_action('admin_menu', array(__CLASS__, 'add_admin_menu'));
         add_action('admin_enqueue_scripts', array(__CLASS__, 'enqueue_scripts'));
-        add_action('wp_ajax_bmu_sync', array(__CLASS__, 'ajax_sync'));
         add_action('wp_ajax_bmu_save_settings', array(__CLASS__, 'ajax_save_settings'));
         add_action('wp_ajax_bmu_delete_backup', array(__CLASS__, 'ajax_delete_backup'));
         add_action('wp_ajax_bmu_delete_all_backups', array(__CLASS__, 'ajax_delete_all_backups'));
         add_action('wp_ajax_bmu_clear_logs', array(__CLASS__, 'ajax_clear_logs'));
         add_action('wp_ajax_bmu_restore_backup', array(__CLASS__, 'ajax_restore_backup'));
         add_action('wp_ajax_bmu_backup_now', array(__CLASS__, 'ajax_backup_now'));
-        add_action('wp_ajax_bmu_test_ssh', array(__CLASS__, 'ajax_test_ssh'));
-        add_action('wp_ajax_bmu_test_db', array(__CLASS__, 'ajax_test_db'));
     }
 
     public static function add_admin_menu()
@@ -30,7 +27,7 @@ class BMU_Admin
             'manage_options',
             'back-me-up',
             array(__CLASS__, 'render_main_page'),
-            'dashicons-update',
+            'dashicons-backup',
             80
         );
 
@@ -45,8 +42,8 @@ class BMU_Admin
 
         add_submenu_page(
             'back-me-up',
-            'Sync Logs',
-            'Sync Logs',
+            'Logs',
+            'Logs',
             'manage_options',
             'back-me-up-logs',
             array(__CLASS__, 'render_logs_page')

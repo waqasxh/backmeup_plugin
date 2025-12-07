@@ -3,162 +3,21 @@ if (!defined('ABSPATH')) exit;
 ?>
 
 <div class="wrap bmu-settings-page">
-    <h1>BackMeUp - Settings</h1>
+    <h1>Back Me Up - Settings</h1>
 
     <form id="bmu-settings-form">
         <?php wp_nonce_field('bmu_ajax_nonce', 'bmu_nonce'); ?>
 
         <div class="bmu-card">
-            <h2>Remote Server Configuration</h2>
+            <h2>Backup Options</h2>
 
             <table class="form-table">
-                <tr>
-                    <th><label for="remote_url">Remote Site URL</label></th>
-                    <td>
-                        <input type="url" id="remote_url" name="remote_url" value="<?php echo esc_attr($settings['remote_url']); ?>" class="regular-text" placeholder="https://example.com">
-                        <p class="description">Full URL of your live website</p>
-                    </td>
-                </tr>
-
-                <tr>
-                    <th><label for="remote_path">Remote WordPress Path</label></th>
-                    <td>
-                        <input type="text" id="remote_path" name="remote_path" value="<?php echo esc_attr($settings['remote_path']); ?>" class="regular-text" placeholder="/var/www/html">
-                        <p class="description">Absolute path to WordPress installation on remote server</p>
-                    </td>
-                </tr>
-            </table>
-        </div>
-
-        <div class="bmu-card">
-            <h2>SSH Connection</h2>
-
-            <div style="margin-bottom: 15px;">
-                <button type="button" id="test-ssh-btn" class="button button-secondary">Test SSH Configuration</button>
-                <div id="ssh-test-results" style="margin-top: 10px;"></div>
-            </div>
-
-            <table class="form-table">
-                <tr>
-                    <th><label for="ssh_host">SSH Host</label></th>
-                    <td>
-                        <input type="text" id="ssh_host" name="ssh_host" value="<?php echo esc_attr($settings['ssh_host']); ?>" class="regular-text" placeholder="example.com">
-                    </td>
-                </tr>
-
-                <tr>
-                    <th><label for="ssh_user">SSH Username</label></th>
-                    <td>
-                        <input type="text" id="ssh_user" name="ssh_user" value="<?php echo esc_attr($settings['ssh_user']); ?>" class="regular-text">
-                    </td>
-                </tr>
-
-                <tr>
-                    <th><label for="ssh_port">SSH Port</label></th>
-                    <td>
-                        <input type="number" id="ssh_port" name="ssh_port" value="<?php echo esc_attr($settings['ssh_port']); ?>" class="small-text" placeholder="22">
-                    </td>
-                </tr>
-
-                <tr>
-                    <th><label for="ssh_key_path">SSH Key Path</label></th>
-                    <td>
-                        <input type="text" id="ssh_key_path" name="ssh_key_path" value="<?php echo esc_attr($settings['ssh_key_path']); ?>" class="regular-text" placeholder="~/.ssh/id_rsa">
-                        <p class="description">Path to your private SSH key file (leave empty to use password)</p>
-                    </td>
-                </tr>
-
-                <tr>
-                    <th><label for="ssh_password">SSH Password</label></th>
-                    <td>
-                        <input type="password" id="ssh_password" name="ssh_password" value="<?php echo esc_attr(isset($settings['ssh_password']) ? $settings['ssh_password'] : ''); ?>" class="regular-text" autocomplete="new-password">
-                        <p class="description">SSH password (only used if SSH key is not provided)</p>
-                    </td>
-                </tr>
-            </table>
-        </div>
-
-        <div class="bmu-card">
-            <h2>Remote Database Configuration</h2>
-
-            <div style="margin-bottom: 15px;">
-                <button type="button" id="test-db-btn" class="button button-secondary">Test Database Connection</button>
-                <div id="db-test-results" style="margin-top: 10px;"></div>
-            </div>
-
-            <table class="form-table">
-                <tr>
-                    <th><label for="db_host">Database Host</label></th>
-                    <td>
-                        <input type="text" id="db_host" name="db_host" value="<?php echo esc_attr($settings['db_host']); ?>" class="regular-text" placeholder="localhost">
-                    </td>
-                </tr>
-
-                <tr>
-                    <th><label for="db_name">Database Name</label></th>
-                    <td>
-                        <input type="text" id="db_name" name="db_name" value="<?php echo esc_attr($settings['db_name']); ?>" class="regular-text">
-                    </td>
-                </tr>
-
-                <tr>
-                    <th><label for="db_user">Database User</label></th>
-                    <td>
-                        <input type="text" id="db_user" name="db_user" value="<?php echo esc_attr($settings['db_user']); ?>" class="regular-text">
-                    </td>
-                </tr>
-
-                <tr>
-                    <th><label for="db_password">Database Password</label></th>
-                    <td>
-                        <input type="password" id="db_password" name="db_password" value="<?php echo esc_attr($settings['db_password']); ?>" class="regular-text">
-                    </td>
-                </tr>
-            </table>
-        </div>
-
-        <div class="bmu-card">
-            <h2>Sync Options</h2>
-
-            <table class="form-table">
-                <tr>
-                    <th><label for="sync_direction">Default Sync Direction</label></th>
-                    <td>
-                        <select id="sync_direction" name="sync_direction">
-                            <option value="pull" <?php selected($settings['sync_direction'], 'pull'); ?>>Pull (Live → Local)</option>
-                            <option value="push" <?php selected($settings['sync_direction'], 'push'); ?>>Push (Local → Live)</option>
-                        </select>
-                    </td>
-                </tr>
-
-                <tr>
-                    <th><label for="backup_before_pull">Backup Before Pull</label></th>
-                    <td>
-                        <label>
-                            <input type="checkbox" id="backup_before_pull" name="backup_before_pull" value="1" <?php checked(!empty($settings['backup_before_pull'])); ?>>
-                            Create local backup before pulling from live server
-                        </label>
-                        <p class="description">Recommended for safety - creates a snapshot before overwriting local files</p>
-                    </td>
-                </tr>
-
-                <tr>
-                    <th><label for="use_direct_db">Use Direct Database Connection</label></th>
-                    <td>
-                        <label>
-                            <input type="checkbox" id="use_direct_db" name="use_direct_db" value="1" <?php checked(!empty($settings['use_direct_db'])); ?>>
-                            Enable direct database connection (MySQL/MariaDB on your local machine connects directly to remote database)
-                        </label>
-                        <p class="description"><strong>Note:</strong> Most hosting providers (including IONOS, GoDaddy, Bluehost) block external database connections for security. Leave this UNCHECKED unless you've specifically configured your remote database to allow external connections. Will automatically use SSH method when disabled or if connection fails. Auto-enabled only when "Test Database Connection" succeeds.</p>
-                    </td>
-                </tr>
-
                 <tr>
                     <th><label>Exclude Paths</label></th>
                     <td>
                         <div id="exclude-paths-container">
                             <?php
-                            $exclude_paths = !empty($settings['exclude_paths']) ? $settings['exclude_paths'] : array('wp-content/cache', 'wp-content/backup');
+                            $exclude_paths = !empty($settings['exclude_paths']) ? $settings['exclude_paths'] : array('wp-content/cache', 'wp-content/backups');
                             foreach ($exclude_paths as $index => $path) :
                             ?>
                                 <div class="exclude-path-row">
@@ -168,10 +27,28 @@ if (!defined('ABSPATH')) exit;
                             <?php endforeach; ?>
                         </div>
                         <button type="button" id="add-exclude-path" class="button">Add Path</button>
-                        <p class="description">Paths to exclude from file sync (relative to WordPress root)</p>
+                        <p class="description">Paths to exclude from backups (relative to WordPress root)</p>
                     </td>
                 </tr>
             </table>
+        </div>
+
+        <div class="bmu-card">
+            <h2>About This Plugin</h2>
+            <p><strong>Back Me Up</strong> - Simple, cross-platform WordPress backup and restore solution.</p>
+            <ul style="list-style: disc; margin-left: 20px;">
+                <li>✓ Works on Windows, Mac, and Linux</li>
+                <li>✓ No external dependencies (rsync, SSH, etc.)</li>
+                <li>✓ Pure PHP implementation</li>
+                <li>✓ Automatic URL replacement when restoring</li>
+                <li>✓ Complete backups (files + database)</li>
+            </ul>
+            <p><strong>Workflow:</strong></p>
+            <ol style="margin-left: 20px;">
+                <li>Create backup on live server → Download backup file</li>
+                <li>Upload backup file to local server → Restore backup</li>
+                <li>URLs automatically updated during restore</li>
+            </ol>
         </div>
 
         <p class="submit">

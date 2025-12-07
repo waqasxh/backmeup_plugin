@@ -1,9 +1,9 @@
 <?php
 
 /**
- * Plugin Name: BackMeUp - WP Sync
- * Description: One-click solution to sync WordPress installation between local and live environments
- * Version: 1.0.0
+ * Plugin Name: BackMeUp - Backup & Restore
+ * Description: Simple, cross-platform WordPress backup and restore solution. No external dependencies required.
+ * Version: 2.0.0
  * Author: NextGen Digital
  * Author URI: https://nextgendigital.uk/
  * License: GPL v2 or later
@@ -17,7 +17,7 @@ if (!defined('ABSPATH')) {
 }
 
 // Define plugin constants
-define('BMU_VERSION', '1.0.0');
+define('BMU_VERSION', '2.0.0');
 define('BMU_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('BMU_PLUGIN_URL', plugin_dir_url(__FILE__));
 define('BMU_PLUGIN_BASENAME', plugin_basename(__FILE__));
@@ -27,7 +27,6 @@ require_once BMU_PLUGIN_DIR . 'includes/class-bmu-core.php';
 require_once BMU_PLUGIN_DIR . 'includes/class-bmu-database.php';
 require_once BMU_PLUGIN_DIR . 'includes/class-bmu-files.php';
 require_once BMU_PLUGIN_DIR . 'includes/class-bmu-admin.php';
-require_once BMU_PLUGIN_DIR . 'includes/class-bmu-sync.php';
 
 // Initialize the plugin
 function bmu_init()
