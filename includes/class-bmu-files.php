@@ -436,6 +436,29 @@ class BMU_Files
                 if (!$import_result) {
                     throw new Exception('Database restore failed');
                 }
+
+                // CRITICAL: Detect and replace URLs after database restore
+                // The backup likely contains live site URLs that need to be replaced with local URLs
+                BMU_Core::log_sync('restore', 'local', 'info', 'Checking for URL replacement after restore...');
+
+                // Try to detect the old URL from the imported database
+                global $wpdb;
+                $old_url = $wpdb->get_var("SELECT option_value FROM {$wpdb->options} WHERE option_name = 'siteurl'");
+                $new_url = get_site_url();
+
+                if ($old_url && $old_url !== $new_url) {
+                    BMU_Core::log_sync('restore', 'local', 'info', "Detected URL change: {$old_url} -> {$new_url}");
+                    BMU_Core::log_sync('restore', 'local', 'info', 'Performing automatic URL replacement...');
+
+                    // Update the core WordPress URL options first
+                    $wpdb->update($wpdb->options, array('option_value' => $new_url), array('option_name' => 'siteurl'));
+                    $wpdb->update($wpdb->options, array('option_value' => $new_url), array('option_name' => 'home'));
+
+                    // Then do search/replace across all content
+                    BMU_Database::search_replace($old_url, $new_url);
+                } else {
+                    BMU_Core::log_sync('restore', 'local', 'info', 'No URL replacement needed (URLs match)');
+                }
             }
 
             // Restore files (excluding wp-config.php to preserve database credentials)

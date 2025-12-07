@@ -151,7 +151,18 @@ class BMU_Sync
                     $remote_url = $settings['remote_url'];
                     $local_url = get_site_url();
 
-                    $results['search_replace'] = BMU_Database::search_replace($remote_url, $local_url);
+                    // Log the exact URLs being used
+                    BMU_Core::log_sync('database', 'pull', 'info', 'Remote Site URL from settings: ' . ($remote_url ?: '(empty)'));
+                    BMU_Core::log_sync('database', 'pull', 'info', 'Local Site URL: ' . $local_url);
+
+                    if (empty($remote_url)) {
+                        BMU_Core::log_sync('database', 'pull', 'warning', 'Remote URL not configured - skipping search/replace');
+                    } elseif ($remote_url === $local_url) {
+                        BMU_Core::log_sync('database', 'pull', 'warning', 'Remote URL is same as Local URL! No replacement performed. Please update Remote Site URL in settings to your live site URL.');
+                    } else {
+                        BMU_Core::log_sync('database', 'pull', 'info', 'Starting URL replacement: ' . $remote_url . ' -> ' . $local_url);
+                        $results['search_replace'] = BMU_Database::search_replace($remote_url, $local_url);
+                    }
                 }
             } else {
                 // Push from local to live
@@ -317,9 +328,10 @@ class BMU_Sync
             BMU_Core::log_sync('database', 'pull', 'success', 'Database connection test successful');
 
             // Now export the database on remote server
-            // Note: Don't escape the filename for the redirect - it needs to be literal
+            // Capture errors separately from SQL output
+            $error_file = '/tmp/wp-db-export-err-' . time() . '.log';
             $ssh_command = sprintf(
-                '%s %s@%s "cd /tmp && %s -h %s -u %s -p\'%s\' %s > %s 2>&1 && test -s %s && echo EXPORT_SUCCESS || echo EXPORT_FAILED"',
+                '%s %s@%s "cd /tmp && %s -h %s -u %s -p\'%s\' %s > %s 2>%s; if [ $? -eq 0 ] && [ -s %s ]; then echo EXPORT_SUCCESS; else echo EXPORT_FAILED:; cat %s 2>/dev/null; fi; rm -f %s"',
                 $ssh_prefix,
                 escapeshellarg($settings['ssh_user']),
                 escapeshellarg($settings['ssh_host']),
@@ -329,23 +341,61 @@ class BMU_Sync
                 str_replace("'", "'\\\\'", $settings['db_password']),
                 escapeshellarg($settings['db_name']),
                 basename($remote_db_file),
-                basename($remote_db_file)
+                $error_file,
+                basename($remote_db_file),
+                $error_file,
+                $error_file
             );
 
             $output = array();
             exec($ssh_command, $output, $return_var);
-            $output_str = implode("\n", $output);
 
-            // Check for success marker (should be the last line)
-            $last_line = trim(end($output));
+            // Filter out SSH warnings from output
+            $filtered_output = array();
+            foreach ($output as $line) {
+                if (
+                    strpos($line, 'Warning: Permanently added') === false &&
+                    strpos($line, '** WARNING:') === false &&
+                    strpos($line, '** This session') === false &&
+                    strpos($line, '** The server') === false &&
+                    strpos($line, 'See https://openssh.com') === false
+                ) {
+                    $filtered_output[] = $line;
+                }
+            }
 
-            if ($last_line !== 'EXPORT_SUCCESS') {
+            $output_str = implode("\n", $filtered_output);
+
+            // Check for success marker (should be the first line after filtering)
+            $first_line = isset($filtered_output[0]) ? trim($filtered_output[0]) : '';
+
+            if ($first_line !== 'EXPORT_SUCCESS') {
                 // Log the full output to see what went wrong
-                BMU_Core::log_sync('database', 'pull', 'error', 'mysqldump failed. Error output: ' . $output_str);
-                throw new Exception('Remote database export failed: ' . $output_str);
+                $error_details = str_replace('EXPORT_FAILED:', '', $output_str);
+                BMU_Core::log_sync('database', 'pull', 'error', 'mysqldump failed. Error: ' . trim($error_details));
+                throw new Exception('Remote database export failed: ' . trim($error_details));
             }
 
             BMU_Core::log_sync('database', 'pull', 'success', 'Database exported on remote server');
+
+            // Verify the file actually exists and get its size
+            $verify_command = sprintf(
+                '%s %s@%s "ls -lh %s 2>&1"',
+                $ssh_prefix,
+                escapeshellarg($settings['ssh_user']),
+                escapeshellarg($settings['ssh_host']),
+                escapeshellarg($remote_db_file)
+            );
+
+            $verify_output = array();
+            exec($verify_command, $verify_output, $verify_return);
+            $verify_str = implode("\n", $verify_output);
+
+            BMU_Core::log_sync('database', 'pull', 'info', 'File verification: ' . $verify_str);
+
+            if ($verify_return !== 0) {
+                throw new Exception('Database file not found on remote server after export: ' . $verify_str);
+            }
 
             // Download the database file using SCP
             $local_db_file_arg = $local_db_file;
@@ -362,25 +412,26 @@ class BMU_Sync
                 escapeshellarg($settings['ssh_port'])
             );
 
-            $scp_command = sprintf(
-                '%s %s@%s:%s %s',
-                $scp_prefix,
-                escapeshellarg($settings['ssh_user']),
-                escapeshellarg($settings['ssh_host']),
-                escapeshellarg($remote_db_file),
-                escapeshellarg($local_db_file_arg)
-            );
-
+            // Download file using SSH cat (more reliable than SCP with temp files)
             BMU_Core::log_sync('database', 'pull', 'info', 'Downloading database file from remote server...');
             BMU_Core::log_sync('database', 'pull', 'info', 'Remote file: ' . $remote_db_file . ', Local file: ' . $local_db_file);
 
+            $download_command = sprintf(
+                '%s %s@%s "cat %s" > %s 2>&1',
+                $ssh_prefix,
+                escapeshellarg($settings['ssh_user']),
+                escapeshellarg($settings['ssh_host']),
+                escapeshellarg($remote_db_file),
+                escapeshellarg($local_db_file)
+            );
+
             $output = array();
-            exec($scp_command . ' 2>&1', $output, $return_var);
-            $scp_output = implode("\n", $output);
+            exec($download_command, $output, $return_var);
+            $download_output = implode("\n", $output);
 
             if ($return_var !== 0) {
-                BMU_Core::log_sync('database', 'pull', 'error', 'SCP command failed with code ' . $return_var . ': ' . $scp_output);
-                throw new Exception('Database download failed (SCP error code ' . $return_var . '): ' . $scp_output);
+                BMU_Core::log_sync('database', 'pull', 'error', 'Download command failed with code ' . $return_var . ': ' . $download_output);
+                throw new Exception('Database download failed (error code ' . $return_var . '): ' . $download_output);
             }
 
             if (!file_exists($local_db_file)) {
